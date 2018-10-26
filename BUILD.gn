@@ -794,6 +794,31 @@ optional("xml") {
   ]
 }
 
+#Andy Zhang
+optional("skshaper") {
+  enabled = true
+  public_defines = [ ]
+  include_dirs = [ "modules/skshaper/include" ]
+
+  deps = [
+    "//third_party/harfbuzz",
+    "//third_party/icu",
+  ]
+  if (target_cpu == "wasm") {
+       sources = [
+         "modules/skshaper/src/SkShaper_primitive.cpp",
+       ]
+  } else {
+       sources = [
+         "modules/skshaper/src/SkShaper_harfbuzz.cpp",
+       ]
+       deps += [
+         "//third_party/harfbuzz",
+         "//third_party/icu",
+       ]
+  }
+}
+
 if (skia_enable_gpu && skia_generate_workarounds) {
   action("workaround_list") {
     script = "tools/build_workaround_header.py"
@@ -850,6 +875,7 @@ component("skia") {
     ":ssse3",
     ":webp",
     ":xml",
+    ":skshaper",#Andy Zhang
   ]
 
   # This file (and all GN files in Skia) are designed to work with an
