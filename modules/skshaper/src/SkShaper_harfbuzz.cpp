@@ -513,6 +513,17 @@ SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
                         bool leftToRight,
                         SkPoint point,
                         SkScalar width) const {
+    return shape(builder,srcPaint,utf8,utf8Bytes,leftToRight,point,width, nullptr);
+}
+
+SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
+                        const SkPaint& srcPaint,
+                        const char* utf8,
+                        size_t utf8Bytes,
+                        bool leftToRight,
+                        SkPoint point,
+                        SkScalar width,
+                        SkScalar* realWidth) const {
     sk_sp<SkFontMgr> fontMgr = SkFontMgr::RefDefault();
     SkASSERT(builder);
     UBiDiLevel defaultLevel = leftToRight ? UBIDI_DEFAULT_LTR : UBIDI_DEFAULT_RTL;
@@ -696,9 +707,14 @@ SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
         if (glyph) {
             glyph->fMustLineBreakBefore = true;
         }
+
         widthSoFar = 0;
         previousBreakValid = false;
         canAddBreakNow = false;
+    }
+
+    if(realWidth != nullptr){
+        (*realWidth) = widthSoFar;
     }
 }
 

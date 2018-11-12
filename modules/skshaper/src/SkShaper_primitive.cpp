@@ -34,11 +34,22 @@ unsigned utf8_lead_byte_to_count(const char* ptr) {
 
 SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
                         const SkPaint& srcPaint,
+                        const char* utf8,
+                        size_t utf8Bytes,
+                        bool leftToRight,
+                        SkPoint point,
+                        SkScalar width) const {
+    return shape(builder,srcPaint,utf8,utf8Bytes,leftToRight,point,width, nullptr);
+}
+
+SkPoint SkShaper::shape(SkTextBlobBuilder* builder,
+                        const SkPaint& srcPaint,
                         const char* utf8text,
                         size_t textBytes,
                         bool leftToRight,
                         SkPoint point,
-                        SkScalar width) const {
+                        SkScalar width,
+                        SkScalar* realWidth) const {
     sk_ignore_unused_variable(leftToRight);
 
     SkPaint paint(srcPaint);

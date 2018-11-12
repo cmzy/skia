@@ -34,7 +34,16 @@ public:
                    size_t textBytes,
                    bool leftToRight,
                    SkPoint point,
-                   SkScalar width) const;
+                   SkScalar width,
+                   SkScalar* realWidth) const;
+
+    SkPoint shape(SkTextBlobBuilder* dest,
+                  const SkPaint& srcPaint,
+                  const char* utf8text,
+                  size_t textBytes,
+                  bool leftToRight,
+                  SkPoint point,
+                  SkScalar width) const;
 
 private:
     SkShaper(const SkShaper&) = delete;
