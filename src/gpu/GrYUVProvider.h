@@ -8,16 +8,16 @@
 #ifndef GrYUVProvider_DEFINED
 #define GrYUVProvider_DEFINED
 
-#include "GrTypes.h"
-#include "SkImageInfo.h"
-#include "SkYUVSizeInfo.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkYUVAIndex.h"
+#include "include/core/SkYUVASizeInfo.h"
+#include "include/gpu/GrTypes.h"
+#include "include/private/GrTypesPriv.h"
 
-class GrContext;
-struct GrSurfaceDesc;
-class GrTexture;
-class GrTextureProxy;
+class GrBackendFormat;
+class GrRecordingContext;
+class GrSurfaceProxyView;
 class SkCachedData;
-struct SkYUVAIndex;
 
 /**
  *  There are at least 2 different ways to extract/retrieve YUV planar data...
@@ -40,12 +40,14 @@ public:
      *
      *  On failure (e.g. the provider had no data), this returns NULL.
      */
-    sk_sp<GrTextureProxy> refAsTextureProxy(GrContext*, const GrSurfaceDesc&,
-                                            SkColorSpace* srcColorSpace,
-                                            SkColorSpace* dstColorSpace);
+    GrSurfaceProxyView refAsTextureProxyView(GrRecordingContext*,
+                                             SkISize,
+                                             GrColorType colorType,
+                                             SkColorSpace* srcColorSpace,
+                                             SkColorSpace* dstColorSpace);
 
-    sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVAIndex[SkYUVAIndex::kIndexCount],
-                                  SkYUVColorSpace*, const void* planes[SkYUVSizeInfo::kMaxCount]);
+    sk_sp<SkCachedData> getPlanes(SkYUVASizeInfo*, SkYUVAIndex[SkYUVAIndex::kIndexCount],
+                                  SkYUVColorSpace*, const void* planes[SkYUVASizeInfo::kMaxCount]);
 
 private:
     virtual uint32_t onGetID() const = 0;
@@ -61,7 +63,7 @@ private:
      *  @param yuvaIndices How the YUVA planes are used/organized
      *  @param colorSpace  Output parameter.
      */
-    virtual bool onQueryYUVA8(SkYUVSizeInfo* sizeInfo,
+    virtual bool onQueryYUVA8(SkYUVASizeInfo* sizeInfo,
                               SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
                               SkYUVColorSpace* colorSpace) const = 0;
 
@@ -76,14 +78,14 @@ private:
      *  @param yuvaIndices How the YUVA planes are used/organized
      *  @param planes      Memory for each of the Y, U, V, and A planes.
      */
-    virtual bool onGetYUVA8Planes(const SkYUVSizeInfo& sizeInfo,
+    virtual bool onGetYUVA8Planes(const SkYUVASizeInfo& sizeInfo,
                                   const SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
                                   void* planes[]) = 0;
 
     // This is used as release callback for the YUV data that we capture in an SkImage when
     // uploading to a gpu. When the upload is complete and we release the SkImage this callback will
     // release the underlying data.
-    static void YUVGen_DataReleaseProc(const void*, void* data);
+    static void YUVGen_DataReleaseProc(void*, void* data);
 };
 
 #endif

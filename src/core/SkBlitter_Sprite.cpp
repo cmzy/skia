@@ -5,14 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkArenaAlloc.h"
-#include "SkColorSpace.h"
-#include "SkColorSpacePriv.h"
-#include "SkColorSpaceXformSteps.h"
-#include "SkCoreBlitters.h"
-#include "SkOpts.h"
-#include "SkRasterPipeline.h"
-#include "SkSpriteBlitter.h"
+#include "include/core/SkColorSpace.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkColorSpaceXformSteps.h"
+#include "src/core/SkCoreBlitters.h"
+#include "src/core/SkOpts.h"
+#include "src/core/SkRasterPipeline.h"
+#include "src/core/SkSpriteBlitter.h"
 
 SkSpriteBlitter::SkSpriteBlitter(const SkPixmap& source)
     : fSource(source) {}
@@ -56,10 +56,10 @@ void SkSpriteBlitter::blitMask(const SkMask& mask, const SkIRect& clip) {
 class SkSpriteBlitter_Memcpy final : public SkSpriteBlitter {
 public:
     static bool Supports(const SkPixmap& dst, const SkPixmap& src, const SkPaint& paint) {
+        // the caller has already inspected the colorspace on src and dst
+        SkASSERT(0 == SkColorSpaceXformSteps(src,dst).flags.mask());
+
         if (dst.colorType() != src.colorType()) {
-            return false;
-        }
-        if (!SkColorSpace::Equals(dst.colorSpace(), src.colorSpace())) {
             return false;
         }
         if (paint.getMaskFilter() || paint.getColorFilter() || paint.getImageFilter()) {
@@ -130,7 +130,7 @@ public:
                                             : kPremul_SkAlphaType;
             fAlloc->make<SkColorSpaceXformSteps>(srcCS, srcAT,
                                                  dstCS, kPremul_SkAlphaType)
-                ->apply(&p);
+                ->apply(&p, fSource.colorType());
         }
         if (fPaintColor.fA != 1.0f) {
             p.append(SkRasterPipeline::scale_1_float, &fPaintColor.fA);
@@ -178,28 +178,31 @@ SkBlitter* SkBlitter::ChooseSprite(const SkPixmap& dst, const SkPaint& paint,
     */
     SkASSERT(allocator != nullptr);
 
+    // TODO: in principle SkRasterPipelineSpriteBlitter could be made to handle this.
     if (source.alphaType() == kUnpremul_SkAlphaType) {
         return nullptr;
     }
 
     SkSpriteBlitter* blitter = nullptr;
 
-    if (!blitter && SkSpriteBlitter_Memcpy::Supports(dst, source, paint)) {
-        blitter = allocator->make<SkSpriteBlitter_Memcpy>(source);
-    }
-    if (!blitter && !dst.colorSpace()) {
-        switch (dst.colorType()) {
-            case kN32_SkColorType:
-                blitter = SkSpriteBlitter::ChooseL32(source, paint, allocator);
-                break;
-            case kRGB_565_SkColorType:
-                blitter = SkSpriteBlitter::ChooseL565(source, paint, allocator);
-                break;
-            case kAlpha_8_SkColorType:
-                blitter = SkSpriteBlitter::ChooseLA8(source, paint, allocator);
-                break;
-            default:
-                break;
+    if (0 == SkColorSpaceXformSteps(source,dst).flags.mask()) {
+        if (!blitter && SkSpriteBlitter_Memcpy::Supports(dst, source, paint)) {
+            blitter = allocator->make<SkSpriteBlitter_Memcpy>(source);
+        }
+        if (!blitter) {
+            switch (dst.colorType()) {
+                case kN32_SkColorType:
+                    blitter = SkSpriteBlitter::ChooseL32(source, paint, allocator);
+                    break;
+                case kRGB_565_SkColorType:
+                    blitter = SkSpriteBlitter::ChooseL565(source, paint, allocator);
+                    break;
+                case kAlpha_8_SkColorType:
+                    blitter = SkSpriteBlitter::ChooseLA8(source, paint, allocator);
+                    break;
+                default:
+                    break;
+            }
         }
     }
     if (!blitter && !paint.getMaskFilter()) {

@@ -6,11 +6,21 @@
  * found in the LICENSE file.
  */
 
-#include "gl/GLTestContext.h"
+#include "tools/gpu/gl/GLTestContext.h"
+
+#if defined(_M_ARM64)
+
+namespace sk_gpu_test {
+
+GLTestContext* CreatePlatformGLTestContext(GrGLStandard, GLTestContext*) { return nullptr; }
+
+}  // namespace sk_gpu_test
+
+#else
 
 #include <windows.h>
 #include <GL/GL.h>
-#include "win/SkWGL.h"
+#include "src/utils/win/SkWGL.h"
 
 #include <windows.h>
 
@@ -30,9 +40,9 @@ public:
 private:
     void destroyGLContext();
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
-    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char* name) const override;
 
     HWND fWindow;
@@ -164,6 +174,12 @@ void WinGLTestContext::destroyGLContext() {
     }
 }
 
+void WinGLTestContext::onPlatformMakeNotCurrent() const {
+    if (!wglMakeCurrent(NULL, NULL)) {
+        SkDebugf("Could not null out the rendering context.\n");
+    }
+}
+
 void WinGLTestContext::onPlatformMakeCurrent() const {
     HDC dc;
     HGLRC glrc;
@@ -188,19 +204,6 @@ std::function<void()> WinGLTestContext::onPlatformGetAutoContextRestore() const 
     return context_restorer();
 }
 
-void WinGLTestContext::onPlatformSwapBuffers() const {
-    HDC dc;
-
-    if (nullptr == fPbufferContext) {
-        dc = fDeviceContext;
-    } else {
-        dc = fPbufferContext->getDC();
-    }
-    if (!SwapBuffers(dc)) {
-        SkDebugf("Could not complete SwapBuffers.\n");
-    }
-}
-
 GrGLFuncPtr WinGLTestContext::onPlatformGetProcAddress(const char* name) const {
     return reinterpret_cast<GrGLFuncPtr>(wglGetProcAddress(name));
 }
@@ -220,3 +223,4 @@ GLTestContext* CreatePlatformGLTestContext(GrGLStandard forcedGpuAPI,
 }
 }  // namespace sk_gpu_test
 
+#endif

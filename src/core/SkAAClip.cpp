@@ -5,18 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkAAClip.h"
+#include "src/core/SkAAClip.h"
 
-#include "SkAtomics.h"
-#include "SkBlitter.h"
-#include "SkColorData.h"
-#include "SkMacros.h"
-#include "SkPath.h"
-#include "SkRectPriv.h"
-#include "SkScan.h"
-#include "SkTo.h"
-#include "SkUTF.h"
-
+#include "include/core/SkPath.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkMacros.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkBlitter.h"
+#include "src/core/SkRectPriv.h"
+#include "src/core/SkScan.h"
+#include <atomic>
 #include <utility>
 
 class AutoAAClipValidate {
@@ -61,7 +59,7 @@ struct SkAAClip::YOffset {
 };
 
 struct SkAAClip::RunHead {
-    int32_t fRefCnt;
+    std::atomic<int32_t> fRefCnt;
     int32_t fRowCount;
     size_t  fDataSize;
 
@@ -81,7 +79,7 @@ struct SkAAClip::RunHead {
     static RunHead* Alloc(int rowCount, size_t dataSize) {
         size_t size = sizeof(RunHead) + rowCount * sizeof(YOffset) + dataSize;
         RunHead* head = (RunHead*)sk_malloc_throw(size);
-        head->fRefCnt = 1;
+        head->fRefCnt.store(1);
         head->fRowCount = rowCount;
         head->fDataSize = dataSize;
         return head;
@@ -92,7 +90,7 @@ struct SkAAClip::RunHead {
         int segments = 0;
         while (width > 0) {
             segments += 1;
-            int n = SkMin32(width, 255);
+            int n = std::min(width, 255);
             width -= n;
         }
         return segments * 2;    // each segment is row[0] + row[1] (n + alpha)
@@ -108,7 +106,7 @@ struct SkAAClip::RunHead {
         yoff->fOffset = 0;
         uint8_t* row = head->data();
         while (width > 0) {
-            int n = SkMin32(width, 255);
+            int n = std::min(width, 255);
             row[0] = n;
             row[1] = 0xFF;
             width -= n;
@@ -200,7 +198,7 @@ void SkAAClip::validate() const {
     SkASSERT(!fBounds.isEmpty());
 
     const RunHead* head = fRunHead;
-    SkASSERT(head->fRefCnt > 0);
+    SkASSERT(head->fRefCnt.load() > 0);
     SkASSERT(head->fRowCount > 0);
 
     const YOffset* yoff = head->yoffsets();
@@ -535,8 +533,8 @@ bool SkAAClip::trimBounds() {
 
 void SkAAClip::freeRuns() {
     if (fRunHead) {
-        SkASSERT(fRunHead->fRefCnt >= 1);
-        if (1 == sk_atomic_dec(&fRunHead->fRefCnt)) {
+        SkASSERT(fRunHead->fRefCnt.load() >= 1);
+        if (1 == fRunHead->fRefCnt--) {
             sk_free(fRunHead);
         }
     }
@@ -566,7 +564,7 @@ SkAAClip& SkAAClip::operator=(const SkAAClip& src) {
         fBounds = src.fBounds;
         fRunHead = src.fRunHead;
         if (fRunHead) {
-            sk_atomic_inc(&fRunHead->fRefCnt);
+            fRunHead->fRefCnt++;
         }
     }
     return *this;
@@ -724,8 +722,8 @@ bool SkAAClip::setRegion(const SkRegion& rgn) {
     SkTDArray<YOffset> yArray;
     SkTDArray<uint8_t> xArray;
 
-    yArray.setReserve(SkMin32(bounds.height(), 1024));
-    xArray.setReserve(SkMin32(bounds.width(), 512) * 128);
+    yArray.setReserve(std::min(bounds.height(), 1024));
+    xArray.setReserve(std::min(bounds.width(), 512) * 128);
 
     SkRegion::Iterator iter(rgn);
     int prevRight = 0;
@@ -828,7 +826,7 @@ bool SkAAClip::quickContains(int left, int top, int right, int bottom) const {
     if (this->isEmpty()) {
         return false;
     }
-    if (!fBounds.contains(left, top, right, bottom)) {
+    if (!fBounds.contains(SkIRect{left, top, right, bottom})) {
         return false;
     }
 #if 0
@@ -1498,7 +1496,7 @@ static void operatorX(SkAAClip::Builder& builder, int lastY,
             }
         } else {
             left = leftA;   // or leftB, since leftA == leftB
-            rite = leftA = leftB = SkMin32(riteA, riteB);
+            rite = leftA = leftB = std::min(riteA, riteB);
             alphaA = iterA.alpha();
             alphaB = iterB.alpha();
         }
@@ -1573,7 +1571,7 @@ static void operateY(SkAAClip::Builder& builder, const SkAAClip& A,
             }
         } else {
             top = topA;   // or topB, since topA == topB
-            bot = topA = topB = SkMin32(botA, botB);
+            bot = topA = topB = std::min(botA, botB);
             rowA = iterA.data();
             rowB = iterB.data();
         }
@@ -1755,7 +1753,7 @@ bool SkAAClip::translate(int dx, int dy, SkAAClip* dst) const {
     }
 
     if (this != dst) {
-        sk_atomic_inc(&fRunHead->fRefCnt);
+        fRunHead->fRefCnt++;
         dst->freeRuns();
         dst->fRunHead = fRunHead;
         dst->fBounds = fBounds;
@@ -1896,7 +1894,7 @@ static void merge(const uint8_t* SK_RESTRICT row, int rowN,
         SkASSERT(srcN > 0);
 
         unsigned newAlpha = SkMulDiv255Round(srcAA[0], row[1]);
-        int minN = SkMin32(srcN, rowN);
+        int minN = std::min(srcN, rowN);
         dstRuns[0] = minN;
         dstRuns += minN;
         dstAA[0] = newAlpha;
@@ -2007,7 +2005,7 @@ void mergeT(const void* inSrc, int srcN, const uint8_t* SK_RESTRICT row, int row
         SkASSERT(rowN > 0);
         SkASSERT(srcN > 0);
 
-        int n = SkMin32(rowN, srcN);
+        int n = std::min(rowN, srcN);
         unsigned rowA = row[1];
         if (0xFF == rowA) {
             small_memcpy(dst, src, n * sizeof(T));
@@ -2144,7 +2142,7 @@ void SkAAClipBlitter::blitMask(const SkMask& origMask, const SkIRect& clip) {
         int localStopY SK_INIT_TO_AVOID_WARNING;
         const uint8_t* row = fAAClip->findRow(y, &localStopY);
         // findRow returns last Y, not stop, so we add 1
-        localStopY = SkMin32(localStopY + 1, stopY);
+        localStopY = std::min(localStopY + 1, stopY);
 
         int initialCount;
         row = fAAClip->findX(row, clip.fLeft, &initialCount);

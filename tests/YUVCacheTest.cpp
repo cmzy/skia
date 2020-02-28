@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkCachedData.h"
-#include "SkYUVPlanesCache.h"
-#include "SkResourceCache.h"
-#include "Test.h"
+#include "src/core/SkCachedData.h"
+#include "src/core/SkResourceCache.h"
+#include "src/core/SkYUVPlanesCache.h"
+#include "tests/Test.h"
 
 enum LockedState {
     kUnlocked,
@@ -32,7 +32,7 @@ DEF_TEST(YUVPlanesCache, reporter) {
     SkResourceCache cache(1024);
 
     SkYUVPlanesCache::Info yuvInfo;
-    for (int i = 0; i < SkYUVSizeInfo::kMaxCount; i++) {
+    for (int i = 0; i < SkYUVASizeInfo::kMaxCount; i++) {
         yuvInfo.fSizeInfo.fSizes[i].fWidth = 20 * (i + 1);
         yuvInfo.fSizeInfo.fSizes[i].fHeight = 10 * (i + 1);
         yuvInfo.fSizeInfo.fWidthBytes[i] = 80 * (i + 1);

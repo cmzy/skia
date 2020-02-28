@@ -5,16 +5,16 @@
  * found in the LICENSE file.
  */
 
-#include "SkWriteBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
-#include "SkBitmap.h"
-#include "SkData.h"
-#include "SkImagePriv.h"
-#include "SkPaintPriv.h"
-#include "SkPtrRecorder.h"
-#include "SkStream.h"
-#include "SkTo.h"
-#include "SkTypeface.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkData.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypeface.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkImagePriv.h"
+#include "src/core/SkPaintPriv.h"
+#include "src/core/SkPtrRecorder.h"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -91,6 +91,10 @@ void SkBinaryWriteBuffer::writeColor4fArray(const SkColor4f* color, uint32_t cou
 void SkBinaryWriteBuffer::writePoint(const SkPoint& point) {
     fWriter.writeScalar(point.fX);
     fWriter.writeScalar(point.fY);
+}
+
+void SkBinaryWriteBuffer::writePoint3(const SkPoint3& point) {
+    this->writePad32(&point, sizeof(SkPoint3));
 }
 
 void SkBinaryWriteBuffer::writePointArray(const SkPoint* point, uint32_t count) {
@@ -214,15 +218,15 @@ void SkBinaryWriteBuffer::writeFlattenable(const SkFlattenable* flattenable) {
      *      after write time.  In order to improve compression, if we have
      *      already written the string, we write its index instead.
      */
+
+    SkFlattenable::Factory factory = flattenable->getFactory();
+    SkASSERT(factory);
+
     if (fFactorySet) {
-        SkFlattenable::Factory factory = flattenable->getFactory();
-        SkASSERT(factory);
         this->write32(fFactorySet->add(factory));
     } else {
-        const char* name = flattenable->getTypeName();
-        SkASSERT(name);
-        SkString key(name);
-        if (uint32_t* indexPtr = fFlattenableDict.find(key)) {
+
+        if (uint32_t* indexPtr = fFlattenableDict.find(factory)) {
             // We will write the index as a 32-bit int.  We want the first byte
             // that we send to be zero - this will act as a sentinel that we
             // have an index (not a string).  This means that we will send the
@@ -232,13 +236,15 @@ void SkBinaryWriteBuffer::writeFlattenable(const SkFlattenable* flattenable) {
             SkASSERT(0 == *indexPtr >> 24);
             this->write32(*indexPtr << 8);
         } else {
+            const char* name = flattenable->getTypeName();
+            SkASSERT(name);
             // Otherwise write the string.  Clients should not use the empty
             // string as a name, or we will have a problem.
-            SkASSERT(strcmp("", name));
+            SkASSERT(0 != strcmp("", name));
             this->writeString(name);
 
             // Add key to dictionary.
-            fFlattenableDict.set(key, fFlattenableDict.count() + 1);
+            fFlattenableDict.set(factory, fFlattenableDict.count() + 1);
         }
     }
 

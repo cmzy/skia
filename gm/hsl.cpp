@@ -5,8 +5,15 @@
  * found in the LICENSE file.
  */
 
-#include "gm.h"
-#include "sk_tool_utils.h"
+#include "gm/gm.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkTypeface.h"
+#include "include/core/SkTypes.h"
+#include "tools/ToolUtils.h"
 
 // Hue, Saturation, Color, and Luminosity blend modes are oddballs.
 // They nominally convert their inputs to unpremul, then to HSL, then
@@ -35,8 +42,8 @@
 //
 // I think the KHR version is just wrong... it produces values >1.  So we use the web version.
 
-static float min(float r, float g, float b) { return SkTMin(r, SkTMin(g, b)); }
-static float max(float r, float g, float b) { return SkTMax(r, SkTMax(g, b)); }
+static float min(float r, float g, float b) { return std::min(r, std::min(g, b)); }
+static float max(float r, float g, float b) { return std::max(r, std::max(g, b)); }
 
 static float sat(float r, float g, float b) { return max(r,g,b) - min(r,g,b); }
 static float lum(float r, float g, float b) { return r*0.30f + g*0.59f + b*0.11f; }
@@ -145,12 +152,11 @@ static SkColor blend(SkColor dst, SkColor src,
 }
 
 DEF_SIMPLE_GM(hsl, canvas, 600, 100) {
-    SkPaint label;
-    sk_tool_utils::set_portable_typeface(&label);
-    label.setAntiAlias(true);
+    SkPaint paint;
+    SkFont  font(ToolUtils::create_portable_typeface());
 
     const char* comment = "HSL blend modes are correct when you see no circles in the squares.";
-    canvas->drawText(comment, strlen(comment), 10,10, label);
+    canvas->drawString(comment, 10,10, font, paint);
 
     // Just to keep things reaaaal simple, we'll only use opaque colors.
     SkPaint bg, fg;
@@ -180,8 +186,7 @@ DEF_SIMPLE_GM(hsl, canvas, 600, 100) {
             canvas->drawCircle(50,50, 20, ref);
         }
 
-        const char* name = SkBlendMode_Name(test.mode);
-        canvas->drawText(name, strlen(name), 20,90, label);
+        canvas->drawString(SkBlendMode_Name(test.mode), 20, 90, font, paint);
 
         canvas->translate(100,0);
     }

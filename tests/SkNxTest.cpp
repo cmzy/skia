@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "Sk4px.h"
-#include "SkNx.h"
-#include "SkRandom.h"
-#include "Test.h"
+#include "include/private/SkNx.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/Sk4px.h"
+#include "tests/Test.h"
 
 template <int N>
 static void test_Nf(skiatest::Reporter* r) {
@@ -133,7 +133,7 @@ DEF_TEST(SkNi_min_lt, r) {
     for (int a = 0; a < (1<<8); a++) {
     for (int b = 0; b < (1<<8); b++) {
         Sk16b aw(a), bw(b);
-        REPORTER_ASSERT(r, Sk16b::Min(aw, bw)[0] == SkTMin(a, b));
+        REPORTER_ASSERT(r, Sk16b::Min(aw, bw)[0] == std::min(a, b));
         REPORTER_ASSERT(r, !(aw < bw)[0] == !(a < b));
     }}
 
@@ -143,12 +143,12 @@ DEF_TEST(SkNi_min_lt, r) {
     for (int i = 0; i < (1<<16); i++) {
         uint16_t a = rand.nextU() >> 16,
                  b = rand.nextU() >> 16;
-        REPORTER_ASSERT(r, Sk16h::Min(Sk16h(a), Sk16h(b))[0] == SkTMin(a, b));
+        REPORTER_ASSERT(r, Sk16h::Min(Sk16h(a), Sk16h(b))[0] == std::min(a, b));
     }
 #else
     for (int a = 0; a < (1<<16); a++) {
     for (int b = 0; b < (1<<16); b++) {
-        REPORTER_ASSERT(r, Sk16h::Min(Sk16h(a), Sk16h(b))[0] == SkTMin(a, b));
+        REPORTER_ASSERT(r, Sk16h::Min(Sk16h(a), Sk16h(b))[0] == std::min(a, b));
     }}
 #endif
 }
@@ -185,8 +185,8 @@ DEF_TEST(Sk4px_muldiv255round, r) {
         int exact = (a*b+127)/255;
 
         // Duplicate a and b 16x each.
-        auto av = Sk4px::DupAlpha(a),
-             bv = Sk4px::DupAlpha(b);
+        Sk4px av = Sk16b(a),
+              bv = Sk16b(b);
 
         // This way should always be exactly correct.
         int correct = (av * bv).div255()[0];
@@ -200,22 +200,6 @@ DEF_TEST(Sk4px_muldiv255round, r) {
         }
     }
     }
-}
-
-DEF_TEST(Sk4px_widening, r) {
-    SkPMColor colors[] = {
-        SkPreMultiplyColor(0xff00ff00),
-        SkPreMultiplyColor(0x40008000),
-        SkPreMultiplyColor(0x7f020406),
-        SkPreMultiplyColor(0x00000000),
-    };
-    auto packed = Sk4px::Load4(colors);
-
-    auto wideLo = packed.widenLo(),
-         wideHi = packed.widenHi(),
-         wideLoHi    = packed.widenLoHi(),
-         wideLoHiAlt = wideLo + wideHi;
-    REPORTER_ASSERT(r, 0 == memcmp(&wideLoHi, &wideLoHiAlt, sizeof(wideLoHi)));
 }
 
 DEF_TEST(SkNx_abs, r) {
@@ -246,8 +230,8 @@ DEF_TEST(Sk4i_minmax, r) {
     auto min = Sk4i::Min(a, b);
     auto max = Sk4i::Max(a, b);
     for(int i = 0; i < 4; ++i) {
-        REPORTER_ASSERT(r, min[i] == SkTMin(a[i], b[i]));
-        REPORTER_ASSERT(r, max[i] == SkTMax(a[i], b[i]));
+        REPORTER_ASSERT(r, min[i] == std::min(a[i], b[i]));
+        REPORTER_ASSERT(r, max[i] == std::max(a[i], b[i]));
     }
 }
 
@@ -297,7 +281,7 @@ DEF_TEST(SkNx_int_float, r) {
     REPORTER_ASSERT(r, f[3] ==  0.0f);
 }
 
-#include "SkRandom.h"
+#include "include/utils/SkRandom.h"
 
 DEF_TEST(SkNx_u16_float, r) {
     {

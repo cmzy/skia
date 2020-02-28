@@ -8,10 +8,12 @@
 #ifndef GrShadowGeoProc_DEFINED
 #define GrShadowGeoProc_DEFINED
 
-#include "GrProcessor.h"
-#include "GrGeometryProcessor.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrProcessor.h"
 
 class GrGLRRectShadowGeoProc;
+class GrSurfaceProxyView;
 
 /**
  * The output color of this effect is a coverage mask for a rrect shadow,
@@ -19,15 +21,15 @@ class GrGLRRectShadowGeoProc;
  */
 class GrRRectShadowGeoProc : public GrGeometryProcessor {
 public:
-    static sk_sp<GrGeometryProcessor> Make() {
-        return sk_sp<GrGeometryProcessor>(new GrRRectShadowGeoProc());
+    static GrGeometryProcessor* Make(SkArenaAlloc* arena, const GrSurfaceProxyView& lutView) {
+        return arena->make<GrRRectShadowGeoProc>(lutView);
     }
 
     const char* name() const override { return "RRectShadow"; }
 
-    const Attribute& inPosition() const { return kInPosition; }
-    const Attribute& inColor() const { return kInColor; }
-    const Attribute& inShadowParams() const { return kInShadowParams; }
+    const Attribute& inPosition() const { return fInPosition; }
+    const Attribute& inColor() const { return fInColor; }
+    const Attribute& inShadowParams() const { return fInShadowParams; }
     GrColor color() const { return fColor; }
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override {}
@@ -35,25 +37,22 @@ public:
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps&) const override;
 
 private:
-    GrRRectShadowGeoProc();
+    friend class ::SkArenaAlloc; // for access to ctor
 
-    const Attribute& onVertexAttribute(int i) const override {
-        return IthAttribute(i, kInPosition, kInColor, kInShadowParams);
-    }
+    GrRRectShadowGeoProc(const GrSurfaceProxyView& lutView);
+
+    const TextureSampler& onTextureSampler(int i) const override { return fLUTTextureSampler; }
 
     GrColor          fColor;
+    TextureSampler   fLUTTextureSampler;
 
-    static constexpr Attribute kInPosition =
-            {"inPosition", kFloat2_GrVertexAttribType, kFloat2_GrSLType};
-    static constexpr Attribute kInColor =
-            {"inColor", kUByte4_norm_GrVertexAttribType, kHalf4_GrSLType};
-    static constexpr Attribute kInShadowParams =
-            {"inShadowParams", kFloat3_GrVertexAttribType, kHalf3_GrSLType};
+    Attribute fInPosition;
+    Attribute fInColor;
+    Attribute fInShadowParams;
 
     GR_DECLARE_GEOMETRY_PROCESSOR_TEST
 
     typedef GrGeometryProcessor INHERITED;
 };
-
 
 #endif

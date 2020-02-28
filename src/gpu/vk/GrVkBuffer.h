@@ -8,9 +8,8 @@
 #ifndef GrVkBuffer_DEFINED
 #define GrVkBuffer_DEFINED
 
-#include "GrVkResource.h"
-#include "vk/GrVkDefines.h"
-#include "vk/GrVkTypes.h"
+#include "include/gpu/vk/GrVkTypes.h"
+#include "src/gpu/vk/GrVkResource.h"
 
 class GrVkGpu;
 
@@ -21,7 +20,7 @@ class GrVkGpu;
 class GrVkBuffer : public SkNoncopyable {
 public:
     virtual ~GrVkBuffer() {
-        // either release or abandon should have been called by the owner of this object.
+        // release should have been called by the owner of this object.
         SkASSERT(!fResource);
         delete [] (unsigned char*)fMapPtr;
     }
@@ -70,7 +69,7 @@ protected:
         Type               fType;
 
     private:
-        void freeGPUData(const GrVkGpu* gpu) const override;
+        void freeGPUData(GrVkGpu* gpu) const override;
 
         void onRecycle(GrVkGpu* gpu) const override { this->unref(gpu); }
 
@@ -78,7 +77,7 @@ protected:
     };
 
     // convenience routine for raw buffer creation
-    static const Resource* Create(const GrVkGpu* gpu,
+    static const Resource* Create(GrVkGpu* gpu,
                                   const Desc& descriptor);
 
     GrVkBuffer(const Desc& desc, const GrVkBuffer::Resource* resource)
@@ -96,7 +95,6 @@ protected:
     bool vkUpdateData(GrVkGpu* gpu, const void* src, size_t srcSizeInBytes,
                       bool* createdNewBuffer = nullptr);
 
-    void vkAbandon();
     void vkRelease(const GrVkGpu* gpu);
 
 private:
@@ -107,6 +105,7 @@ private:
 
     void internalMap(GrVkGpu* gpu, size_t size, bool* createdNewBuffer = nullptr);
     void internalUnmap(GrVkGpu* gpu, size_t size);
+    void copyCpuDataToGpuBuffer(GrVkGpu* gpu, const void* srcData, size_t size);
 
     void validate() const;
     bool vkIsMapped() const;

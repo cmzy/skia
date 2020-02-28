@@ -5,15 +5,13 @@
  * found in the LICENSE file.
  */
 
-#include "SkRegion.h"
+#include "include/core/SkRegion.h"
 
-#include "SkAtomics.h"
-#include "SkMacros.h"
-#include "SkRegionPriv.h"
-#include "SkSafeMath.h"
-#include "SkTemplates.h"
-#include "SkTo.h"
-#include "SkUTF.h"
+#include "include/private/SkMacros.h"
+#include "include/private/SkTemplates.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkRegionPriv.h"
+#include "src/core/SkSafeMath.h"
 
 #include <utility>
 
@@ -26,8 +24,6 @@
  *
  *  Y-Sentinel
  */
-
-SkDEBUGCODE(int32_t gRgnAllocCounter;)
 
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -108,7 +104,7 @@ bool SkRegion::RunsAreARect(const SkRegion::RunType runs[], int count,
         SkASSERT(runs[0] < runs[1]);    // valid height
         SkASSERT(runs[3] < runs[4]);    // valid width
 
-        bounds->set(runs[3], runs[0], runs[4], runs[1]);
+        bounds->setLTRB(runs[3], runs[0], runs[4], runs[1]);
         return true;
     }
     return false;
@@ -117,7 +113,7 @@ bool SkRegion::RunsAreARect(const SkRegion::RunType runs[], int count,
 //////////////////////////////////////////////////////////////////////////
 
 SkRegion::SkRegion() {
-    fBounds.set(0, 0, 0, 0);
+    fBounds.setEmpty();
     fRunHead = SkRegion_gEmptyRunHeadPtr;
 }
 
@@ -139,9 +135,6 @@ void SkRegion::freeRuns() {
     if (this->isComplex()) {
         SkASSERT(fRunHead->fRefCnt >= 1);
         if (--fRunHead->fRefCnt == 0) {
-            //SkASSERT(gRgnAllocCounter > 0);
-            //SkDEBUGCODE(sk_atomic_dec(&gRgnAllocCounter));
-            //SkDEBUGF("************** gRgnAllocCounter::free %d\n", gRgnAllocCounter);
             sk_free(fRunHead);
         }
     }
@@ -183,7 +176,7 @@ int SkRegion::computeRegionComplexity() const {
 
 bool SkRegion::setEmpty() {
     this->freeRuns();
-    fBounds.set(0, 0, 0, 0);
+    fBounds.setEmpty();
     fRunHead = SkRegion_gEmptyRunHeadPtr;
     return false;
 }
@@ -227,7 +220,7 @@ bool SkRegion::op(const SkRegion& rgn, const SkIRect& rect, Op op) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#ifdef SK_BUILD_FOR_ANDROID
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 #include <stdio.h>
 char* SkRegion::toString() {
     Iterator iter(*this);
@@ -930,7 +923,7 @@ static int operate(const SkRegionPriv::RunType a_runs[],
     assert_sentinel(b_top, false);
     assert_sentinel(b_bot, false);
 
-    RgnOper oper(SkMin32(a_top, b_top), dst, op);
+    RgnOper oper(std::min(a_top, b_top), dst, op);
 
     int prevBot = SkRegion_kRunTypeSentinel; // so we fail the first test
 
@@ -1067,8 +1060,7 @@ bool SkRegion::Oper(const SkRegion& rgnaOrig, const SkRegion& rgnbOrig, Op op,
         if (a_empty) {
             return setEmptyCheck(result);
         }
-        if (b_empty || !SkIRect::IntersectsNoEmptyCheck(rgna->fBounds,
-                                                        rgnb->fBounds)) {
+        if (b_empty || !SkIRect::Intersects(rgna->fBounds, rgnb->fBounds)) {
             return setRegionCheck(result, *rgna);
         }
         if (b_rect && rgnb->fBounds.containsNoEmptyCheck(rgna->fBounds)) {
@@ -1146,7 +1138,7 @@ bool SkRegion::op(const SkRegion& rgna, const SkRegion& rgnb, Op op) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-#include "SkBuffer.h"
+#include "src/core/SkBuffer.h"
 
 size_t SkRegion::writeToMemory(void* storage) const {
     if (nullptr == storage) {
@@ -1379,7 +1371,7 @@ void SkRegion::Iterator::reset(const SkRegion& rgn) {
             fRuns = nullptr;
         } else {
             fRuns = rgn.fRunHead->readonly_runs();
-            fRect.set(fRuns[3], fRuns[0], fRuns[4], fRuns[1]);
+            fRect.setLTRB(fRuns[3], fRuns[0], fRuns[4], fRuns[1]);
             fRuns += 5;
             // Now fRuns points to the 2nd interval (or x-sentinel)
         }
@@ -1535,10 +1527,10 @@ bool SkRegion::Spanerator::next(int* left, int* right) {
     SkASSERT(runs[1] > fLeft);
 
     if (left) {
-        *left = SkMax32(fLeft, runs[0]);
+        *left = std::max(fLeft, runs[0]);
     }
     if (right) {
-        *right = SkMin32(fRight, runs[1]);
+        *right = std::min(fRight, runs[1]);
     }
     fRuns = runs + 2;
     return true;

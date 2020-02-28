@@ -8,11 +8,13 @@
 #ifndef GrBitmapTextGeoProc_DEFINED
 #define GrBitmapTextGeoProc_DEFINED
 
-#include "GrProcessor.h"
-#include "GrGeometryProcessor.h"
+#include "src/core/SkArenaAlloc.h"
+#include "src/gpu/GrGeometryProcessor.h"
+#include "src/gpu/GrProcessor.h"
 
 class GrGLBitmapTextGeoProc;
 class GrInvariantOutput;
+class GrSurfaceProxyView;
 
 /**
  * The output color of this effect is a modulation of the input color and a sample from a texture.
@@ -23,14 +25,18 @@ class GrBitmapTextGeoProc : public GrGeometryProcessor {
 public:
     static constexpr int kMaxTextures = 4;
 
-    static sk_sp<GrGeometryProcessor> Make(const GrShaderCaps& caps, GrColor color,
-                                           const sk_sp<GrTextureProxy>* proxies,
-                                           int numActiveProxies,
-                                           const GrSamplerState& p, GrMaskFormat format,
-                                           const SkMatrix& localMatrix, bool usesW) {
-        return sk_sp<GrGeometryProcessor>(
-            new GrBitmapTextGeoProc(caps, color, proxies, numActiveProxies, p, format,
-                                    localMatrix, usesW));
+    static GrGeometryProcessor* Make(SkArenaAlloc* arena,
+                                     const GrShaderCaps& caps,
+                                     const SkPMColor4f& color,
+                                     bool wideColor,
+                                     const GrSurfaceProxyView* views,
+                                     int numActiveViews,
+                                     GrSamplerState p,
+                                     GrMaskFormat format,
+                                     const SkMatrix& localMatrix,
+                                     bool usesW) {
+        return arena->make<GrBitmapTextGeoProc>(caps, color, wideColor, views, numActiveViews,
+                                                p, format, localMatrix, usesW);
     }
 
     ~GrBitmapTextGeoProc() override {}
@@ -41,30 +47,31 @@ public:
     const Attribute& inColor() const { return fInColor; }
     const Attribute& inTextureCoords() const { return fInTextureCoords; }
     GrMaskFormat maskFormat() const { return fMaskFormat; }
-    GrColor color() const { return fColor; }
+    const SkPMColor4f& color() const { return fColor; }
     bool hasVertexColor() const { return fInColor.isInitialized(); }
     const SkMatrix& localMatrix() const { return fLocalMatrix; }
     bool usesW() const { return fUsesW; }
-    const SkISize& atlasSize() const { return fAtlasSize; }
+    const SkISize& atlasDimensions() const { return fAtlasDimensions; }
 
-    void addNewProxies(const sk_sp<GrTextureProxy>*, int numActiveProxies, const GrSamplerState&);
+    void addNewViews(const GrSurfaceProxyView*, int numActiveViews, GrSamplerState);
 
     void getGLSLProcessorKey(const GrShaderCaps& caps, GrProcessorKeyBuilder* b) const override;
 
     GrGLSLPrimitiveProcessor* createGLSLInstance(const GrShaderCaps& caps) const override;
 
 private:
-    GrBitmapTextGeoProc(const GrShaderCaps&, GrColor, const sk_sp<GrTextureProxy>* proxies,
-                        int numProxies, const GrSamplerState& params, GrMaskFormat format,
-                        const SkMatrix& localMatrix, bool usesW);
+    friend class ::SkArenaAlloc; // for access to ctor
 
-    const Attribute& onVertexAttribute(int i) const override;
+    GrBitmapTextGeoProc(const GrShaderCaps&, const SkPMColor4f&, bool wideColor,
+                        const GrSurfaceProxyView* views, int numViews, GrSamplerState params,
+                        GrMaskFormat format, const SkMatrix& localMatrix, bool usesW);
+
     const TextureSampler& onTextureSampler(int i) const override { return fTextureSamplers[i]; }
 
-    GrColor          fColor;
+    SkPMColor4f      fColor;
     SkMatrix         fLocalMatrix;
     bool             fUsesW;
-    SkISize          fAtlasSize;  // size for all textures used with fTextureSamplers[].
+    SkISize          fAtlasDimensions;  // dimensions for all textures used with fTextureSamplers[].
     TextureSampler   fTextureSamplers[kMaxTextures];
     Attribute        fInPosition;
     Attribute        fInColor;

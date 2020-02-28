@@ -5,10 +5,10 @@
  * found in the LICENSE file.
  */
 
-#include "SkPathEffect.h"
-#include "SkPath.h"
-#include "SkReadBuffer.h"
-#include "SkWriteBuffer.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
+#include "src/core/SkReadBuffer.h"
+#include "src/core/SkWriteBuffer.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -94,10 +94,6 @@ public:
         return sk_sp<SkPathEffect>(new SkComposePathEffect(outer, inner));
     }
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    bool exposedInAndroidJavaAPI() const override { return true; }
-#endif
-
 protected:
     SkComposePathEffect(sk_sp<SkPathEffect> outer, sk_sp<SkPathEffect> inner)
         : INHERITED(outer, inner) {}
@@ -156,10 +152,6 @@ public:
 
     SK_FLATTENABLE_HOOKS(SkSumPathEffect)
 
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    bool exposedInAndroidJavaAPI() const override { return true; }
-#endif
-
 protected:
     SkSumPathEffect(sk_sp<SkPathEffect> first, sk_sp<SkPathEffect> second)
         : INHERITED(first, second) {}
@@ -198,6 +190,6 @@ sk_sp<SkPathEffect> SkPathEffect::MakeCompose(sk_sp<SkPathEffect> outer,
 }
 
 void SkPathEffect::RegisterFlattenables() {
-    SK_REGISTER_FLATTENABLE(SkComposePathEffect)
-    SK_REGISTER_FLATTENABLE(SkSumPathEffect)
+    SK_REGISTER_FLATTENABLE(SkComposePathEffect);
+    SK_REGISTER_FLATTENABLE(SkSumPathEffect);
 }

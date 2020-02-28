@@ -10,12 +10,12 @@
 #ifndef GrPaint_DEFINED
 #define GrPaint_DEFINED
 
-#include "GrColor.h"
-#include "GrFragmentProcessor.h"
-#include "SkBlendMode.h"
-#include "SkRefCnt.h"
-#include "SkRegion.h"
-#include "SkTLazy.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkRegion.h"
+#include "src/core/SkTLazy.h"
+#include "src/gpu/GrColor.h"
+#include "src/gpu/GrFragmentProcessor.h"
 
 class GrTextureProxy;
 class GrXPFactory;
@@ -50,11 +50,6 @@ public:
     void setColor4f(const SkPMColor4f& color) { fColor = color; }
     const SkPMColor4f& getColor4f() const { return fColor; }
 
-    /**
-     * Legacy getter, until all code handles 4f directly.
-     */
-    GrColor getColor() const { return fColor.toBytes_RGBA(); }
-
     void setXPFactory(const GrXPFactory* xpFactory) {
         fXPFactory = xpFactory;
         fTrivial &= !SkToBool(xpFactory);
@@ -82,16 +77,6 @@ public:
         fTrivial = false;
     }
 
-    /**
-     * Helpers for adding color or coverage effects that sample a texture. The matrix is applied
-     * to the src space position to compute texture coordinates.
-     */
-    void addColorTextureProcessor(sk_sp<GrTextureProxy>, const SkMatrix&);
-    void addColorTextureProcessor(sk_sp<GrTextureProxy>, const SkMatrix&, const GrSamplerState&);
-
-    void addCoverageTextureProcessor(sk_sp<GrTextureProxy>, const SkMatrix&);
-    void addCoverageTextureProcessor(sk_sp<GrTextureProxy>, const SkMatrix&, const GrSamplerState&);
-
     int numColorFragmentProcessors() const { return fColorFragmentProcessors.count(); }
     int numCoverageFragmentProcessors() const { return fCoverageFragmentProcessors.count(); }
     int numTotalFragmentProcessors() const { return this->numColorFragmentProcessors() +
@@ -112,13 +97,17 @@ public:
      * coverage and color, so the actual values written to pixels with partial coverage may still
      * not seem constant, even if this function returns true.
      */
-    bool isConstantBlendedColor(GrColor* constantColor) const;
+    bool isConstantBlendedColor(SkPMColor4f* constantColor) const;
 
     /**
      * A trivial paint is one that uses src-over and has no fragment processors.
      * It may have variable sRGB settings.
      **/
     bool isTrivial() const { return fTrivial; }
+
+    friend void assert_alive(GrPaint& p) {
+        SkASSERT(p.fAlive);
+    }
 
 private:
     // Since paint copying is expensive if there are fragment processors, we require going through
@@ -133,6 +122,7 @@ private:
     SkSTArray<2, std::unique_ptr<GrFragmentProcessor>> fCoverageFragmentProcessors;
     bool fTrivial = true;
     SkPMColor4f fColor = SK_PMColor4fWHITE;
+    SkDEBUGCODE(bool fAlive = true;)  // Set false after moved from.
 };
 
 #endif

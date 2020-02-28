@@ -8,15 +8,15 @@
 #ifndef SkImageGenerator_DEFINED
 #define SkImageGenerator_DEFINED
 
-#include "SkBitmap.h"
-#include "SkColor.h"
-#include "SkImage.h"
-#include "SkImageInfo.h"
-#include "SkYUVASizeInfo.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkImage.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkYUVAIndex.h"
+#include "include/core/SkYUVASizeInfo.h"
 
-class GrContext;
-class GrContextThreadSafeProxy;
-class GrTextureProxy;
+class GrRecordingContext;
+class GrSurfaceProxyView;
 class GrSamplerState;
 class SkBitmap;
 class SkData;
@@ -91,7 +91,7 @@ public:
      *  @param yuvaIndices How the YUVA planes are organized/used
      *  @param colorSpace  Output parameter.
      */
-    bool queryYUVA8(SkYUVSizeInfo* sizeInfo,
+    bool queryYUVA8(SkYUVASizeInfo* sizeInfo,
                     SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
                     SkYUVColorSpace* colorSpace) const;
 
@@ -107,7 +107,7 @@ public:
      *  @param planes      Memory for the Y, U, V, and A planes. Note that, depending on the
      *                     settings in yuvaIndices, anywhere from 1..4 planes could be returned.
      */
-    bool getYUVA8Planes(const SkYUVSizeInfo& sizeInfo,
+    bool getYUVA8Planes(const SkYUVASizeInfo& sizeInfo,
                         const SkYUVAIndex yuvaIndices[SkYUVAIndex::kIndexCount],
                         void* planes[]);
 
@@ -139,9 +139,10 @@ public:
      *  the generator is allowed to return a non mipped proxy, but this will have some additional
      *  overhead in later allocating mips and copying of the base layer.
      */
-    sk_sp<GrTextureProxy> generateTexture(GrContext*, const SkImageInfo& info,
-                                          const SkIPoint& origin,
-                                          bool willNeedMipMaps);
+    GrSurfaceProxyView generateTexture(GrRecordingContext*, const SkImageInfo& info,
+                                       const SkIPoint& origin, bool willNeedMipMaps);
+
+    bool texturesAreCacheable() const { return this->onTexturesAreCacheable(); }
 #endif
 
     /**
@@ -170,13 +171,10 @@ protected:
     struct Options {};
     virtual bool onGetPixels(const SkImageInfo&, void*, size_t, const Options&) { return false; }
     virtual bool onIsValid(GrContext*) const { return true; }
-    virtual bool onQueryYUVA8(SkYUVSizeInfo*, SkYUVAIndex[SkYUVAIndex::kIndexCount],
+    virtual bool onQueryYUVA8(SkYUVASizeInfo*, SkYUVAIndex[SkYUVAIndex::kIndexCount],
                               SkYUVColorSpace*) const { return false; }
-    virtual bool onGetYUVA8Planes(const SkYUVSizeInfo&, const SkYUVAIndex[SkYUVAIndex::kIndexCount],
+    virtual bool onGetYUVA8Planes(const SkYUVASizeInfo&, const SkYUVAIndex[SkYUVAIndex::kIndexCount],
                                   void*[4] /*planes*/) { return false; }
-    // Deprecated methods
-    virtual bool onQueryYUV8(SkYUVSizeInfo*, SkYUVColorSpace*) const { return false; }
-    virtual bool onGetYUV8Planes(const SkYUVSizeInfo&, void*[3] /*planes*/) { return false; }
 #if SK_SUPPORT_GPU
     enum class TexGenType {
         kNone,           //image generator does not implement onGenerateTexture
@@ -184,9 +182,10 @@ protected:
         kExpensive,      //onGenerateTexture is implemented and it is relatively slow
     };
 
-    virtual TexGenType onCanGenerateTexture() const { return TexGenType::kNone; }
-    virtual sk_sp<GrTextureProxy> onGenerateTexture(GrContext*, const SkImageInfo&, const SkIPoint&,
+    virtual GrSurfaceProxyView onGenerateTexture(GrRecordingContext*, const SkImageInfo&,
+                                                    const SkIPoint&,
                                                     bool willNeedMipMaps);  // returns nullptr
+    virtual bool onTexturesAreCacheable() const { return true; }
 #endif
 
 private:

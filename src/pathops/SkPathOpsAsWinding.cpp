@@ -4,16 +4,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkOpEdgeBuilder.h"
-#include "SkPathOpsCommon.h"
-#include "SkRect.h"
+#include "include/core/SkRect.h"
+#include "src/pathops/SkOpEdgeBuilder.h"
+#include "src/pathops/SkPathOpsCommon.h"
 #include <algorithm>
 #include <vector>
 
 using std::vector;
 
 struct Contour {
-    enum class Direction {  // SkPath::Direction doesn't have 'none' state
+    enum class Direction {  // SkPathDirection doesn't have 'none' state
         kCCW = -1,
         kNone,
         kCW,
@@ -45,7 +45,7 @@ static Contour::Direction to_direction(SkScalar dy) {
 
 static int contains_edge(SkPoint pts[4], SkPath::Verb verb, SkScalar weight, const SkPoint& edge) {
     SkRect bounds;
-    bounds.set(pts, kPtCount[verb] + 1);
+    bounds.setBounds(pts, kPtCount[verb] + 1);
     if (bounds.fTop > edge.fY) {
         return 0;
     }
@@ -260,7 +260,7 @@ public:
         return winding;
     }
 
-    void containerContains(Contour& contour, Contour& test) {
+    bool containerContains(Contour& contour, Contour& test) {
         // find outside point on lesser contour
         // arbitrarily, choose non-horizontal edge where point <= bounds left
         // note that if leftmost point is control point, may need tight bounds
@@ -273,8 +273,8 @@ public:
         int winding = this->nextEdge(contour, Edge::kCompare);
         // if edge is up, mark contour cw, otherwise, ccw
         // sum of greater edges direction should be cw, 0, ccw
-        SkASSERT(-1 <= winding && winding <= 1);
         test.fContained = winding != 0;
+        return -1 <= winding && winding <= 1;
     }
 
     void inParent(Contour& contour, Contour& parent) {
@@ -297,13 +297,18 @@ public:
         parent.fChildren.push_back(&contour);
     }
 
-    void checkContainerChildren(Contour* parent, Contour* child) {
+    bool checkContainerChildren(Contour* parent, Contour* child) {
         for (auto grandChild : child->fChildren) {
-            checkContainerChildren(child, grandChild);
+            if (!checkContainerChildren(child, grandChild)) {
+                return false;
+            }
         }
         if (parent) {
-            containerContains(*parent, *child);
+            if (!containerContains(*parent, *child)) {
+                return false;
+            }
         }
+        return true;
     }
 
     bool markReverse(Contour* parent, Contour* child) {
@@ -362,23 +367,23 @@ private:
     const SkPath& fPath;
 };
 
-static bool set_result_path(SkPath* result, const SkPath& path, SkPath::FillType fillType) {
+static bool set_result_path(SkPath* result, const SkPath& path, SkPathFillType fillType) {
     *result = path;
     result->setFillType(fillType);
     return true;
 }
 
-bool SK_API AsWinding(const SkPath& path, SkPath* result) {
+bool AsWinding(const SkPath& path, SkPath* result) {
     if (!path.isFinite()) {
         return false;
     }
-    SkPath::FillType fillType = path.getFillType();
-    if (fillType == SkPath::kWinding_FillType
-            || fillType == SkPath::kInverseWinding_FillType ) {
+    SkPathFillType fillType = path.getFillType();
+    if (fillType == SkPathFillType::kWinding
+            || fillType == SkPathFillType::kInverseWinding ) {
         return set_result_path(result, path, fillType);
     }
-    fillType = path.isInverseFillType() ? SkPath::kInverseWinding_FillType :
-            SkPath::kWinding_FillType;
+    fillType = path.isInverseFillType() ? SkPathFillType::kInverseWinding :
+            SkPathFillType::kWinding;
     if (path.isEmpty() || path.isConvex()) {
         return set_result_path(result, path, fillType);
     }
@@ -402,7 +407,9 @@ bool SK_API AsWinding(const SkPath& path, SkPath* result) {
     // starting with outermost and moving inward, see if one path contains another
     for (auto contour : sorted.fChildren) {
         winder.nextEdge(*contour, OpAsWinding::Edge::kInitial);
-        winder.checkContainerChildren(nullptr, contour);
+        if (!winder.checkContainerChildren(nullptr, contour)) {
+            return false;
+        }
     }
     // starting with outermost and moving inward, mark paths to reverse
     bool reversed = false;

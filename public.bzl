@@ -215,10 +215,6 @@ BASE_SRCS_ALL = struct(
         "src/**/*.h",
         "src/**/*.cpp",
         "src/**/*.inc",
-
-        # Third Party
-        "third_party/gif/*.cpp",
-        "third_party/gif/*.h",
     ],
     exclude = [
         # Exclude platform-dependent files.
@@ -239,7 +235,6 @@ BASE_SRCS_ALL = struct(
         "src/utils/win/**/*",
 
         # Exclude multiple definitions.
-        "src/core/SkPicture_none.cpp",
         "src/gpu/GrPathRendering_none.cpp",
         "src/gpu/ccpr/GrCoverageCountingPathRenderer_none.cpp",
         "src/gpu/gl/GrGLMakeNativeInterface_none.cpp",
@@ -255,6 +250,12 @@ BASE_SRCS_ALL = struct(
         # Currently exclude all vulkan specific files
         "src/gpu/vk/*",
 
+        # Currently exclude all Direct3D specific files
+        "src/gpu/d3d/*",
+
+        # Currently exclude all Dawn-specific files
+        "src/gpu/dawn/*",
+
         # Defines main.
         "src/sksl/SkSLMain.cpp",
 
@@ -263,28 +264,29 @@ BASE_SRCS_ALL = struct(
 
         # Atlas text
         "src/atlastext/*",
-
-        # Compute backend not yet even hooked into Skia.
-        "src/compute/**/*",
     ],
 )
 
 def codec_srcs(limited):
-    """Sources for the codecs. Excludes Ico, Webp, Png, and Raw if limited."""
-    exclude = []
+    """Sources for the codecs. Excludes Raw, and Ico, Webp, and Png if limited."""
+
+    exclude = ["src/codec/*Raw*.cpp"]
     if limited:
         exclude += [
             "src/codec/*Ico*.cpp",
             "src/codec/*Webp*.cpp",
             "src/codec/*Png*",
-            "src/codec/*Raw*.cpp",
         ]
     return native.glob(["src/codec/*.cpp"], exclude = exclude)
 
-# Platform-dependent SRCS for google3-default platform.
-BASE_SRCS_UNIX = struct(
+GL_SRCS_UNIX = struct(
     include = [
         "src/gpu/gl/GrGLMakeNativeInterface_none.cpp",
+    ],
+    exclude = [],
+)
+PORTS_SRCS_UNIX = struct(
+    include = [
         "src/ports/**/*.cpp",
         "src/ports/**/*.h",
     ],
@@ -301,19 +303,21 @@ BASE_SRCS_UNIX = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
-        "src/ports/SkFontMgr_fontconfig.cpp",
         "src/ports/SkFontMgr_fontconfig_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
+        "src/ports/SkFontMgr_fuchsia.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
 )
 
-# Platform-dependent SRCS for google3-default Android.
-BASE_SRCS_ANDROID = struct(
+GL_SRCS_ANDROID = struct(
     include = [
         "src/gpu/gl/android/*.cpp",
+    ],
+    exclude = [],
+)
+PORTS_SRCS_ANDROID = struct(
+    include = [
         "src/ports/**/*.cpp",
         "src/ports/**/*.h",
     ],
@@ -332,17 +336,20 @@ BASE_SRCS_ANDROID = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
+        "src/ports/SkFontMgr_fuchsia.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
 )
 
-# Platform-dependent SRCS for google3-default iOS.
-BASE_SRCS_IOS = struct(
+GL_SRCS_IOS = struct(
     include = [
         "src/gpu/gl/iOS/GrGLMakeNativeInterface_iOS.cpp",
+    ],
+    exclude = [],
+)
+PORTS_SRCS_IOS = struct(
+    include = [
         "src/ports/**/*.cpp",
         "src/ports/**/*.h",
         "src/utils/mac/*.cpp",
@@ -365,26 +372,49 @@ BASE_SRCS_IOS = struct(
         "src/ports/SkFontMgr_custom_embedded_factory.cpp",
         "src/ports/SkFontMgr_custom_empty_factory.cpp",
         "src/ports/SkFontMgr_empty_factory.cpp",
-        "src/ports/SkGlobalInitialization_none.cpp",
-        "src/ports/SkGlobalInitialization_none_imagefilters.cpp",
+        "src/ports/SkFontMgr_fuchsia.cpp",
         "src/ports/SkImageGenerator_none.cpp",
         "src/ports/SkTLS_none.cpp",
     ],
 )
 
-################################################################################
-## skia_srcs()
-################################################################################
-def skia_srcs(os_conditions):
-    """Sources to be compiled into the skia library."""
-    return skia_glob(BASE_SRCS_ALL) + skia_select(
+def base_srcs():
+    return skia_glob(BASE_SRCS_ALL)
+
+def ports_srcs(os_conditions):
+    return skia_select(
         os_conditions,
         [
-            skia_glob(BASE_SRCS_UNIX),
-            skia_glob(BASE_SRCS_ANDROID),
-            skia_glob(BASE_SRCS_IOS),
+            skia_glob(PORTS_SRCS_UNIX),
+            skia_glob(PORTS_SRCS_ANDROID),
+            skia_glob(PORTS_SRCS_IOS),
         ],
     )
+
+def gl_srcs(os_conditions):
+    return skia_select(
+        os_conditions,
+        [
+            skia_glob(GL_SRCS_UNIX),
+            skia_glob(GL_SRCS_ANDROID),
+            skia_glob(GL_SRCS_IOS),
+        ],
+    )
+
+def skia_srcs(os_conditions):
+    return base_srcs() + ports_srcs(os_conditions) + gl_srcs(os_conditions)
+
+def metal_objc_srcs():
+    return native.glob(
+        [
+            "include/**/*.h",
+            "src/**/*.h",
+            "src/gpu/mtl/**/*.mm",
+            "third_party/**/*.h",
+        ],
+    ) + [
+        "src/image/SkSurface_GpuMtl.mm",
+    ]
 
 ################################################################################
 ## INCLUDES
@@ -392,6 +422,7 @@ def skia_srcs(os_conditions):
 
 # Includes needed by Skia implementation.  Not public includes.
 INCLUDES = [
+    ".",
     "include/android",
     "include/c",
     "include/codec",
@@ -404,6 +435,7 @@ INCLUDES = [
     "include/pathops",
     "include/ports",
     "include/private",
+    "include/third_party/skcms",
     "include/utils",
     "include/utils/mac",
     "src/codec",
@@ -437,51 +469,60 @@ DM_SRCS_ALL = struct(
         "experimental/svg/model/*.h",
         "gm/*.cpp",
         "gm/*.h",
+        "gm/verifiers/*.cpp",
+        "gm/verifiers/*.h",
+        "src/utils/SkMultiPictureDocument.cpp",
         "src/xml/*.cpp",
         "tests/*.cpp",
         "tests/*.h",
-        "tools/ios_utils.h",
-        "tools/BinaryAsset.h",
+        "tools/AutoreleasePool.h",
         "tools/BigPathBench.inc",
+        "tools/BinaryAsset.h",
         "tools/CrashHandler.cpp",
         "tools/CrashHandler.h",
         "tools/DDLPromiseImageHelper.cpp",
         "tools/DDLPromiseImageHelper.h",
         "tools/DDLTileHelper.cpp",
         "tools/DDLTileHelper.h",
+        "tools/HashAndEncode.cpp",
+        "tools/HashAndEncode.h",
         "tools/ProcStats.cpp",
         "tools/ProcStats.h",
         "tools/Registry.h",
         "tools/ResourceFactory.h",
         "tools/Resources.cpp",
         "tools/Resources.h",
-        "tools/SkJSONCPP.h",
+        "tools/SkMetaData.cpp",
+        "tools/SkMetaData.h",
+        "tools/SkSharingProc.cpp",
+        "tools/SkVMBuilders.cpp",
+        "tools/SkVMBuilders.h",
+        "tools/ToolUtils.cpp",
+        "tools/ToolUtils.h",
         "tools/UrlDataManager.cpp",
         "tools/UrlDataManager.h",
         "tools/debugger/*.cpp",
         "tools/debugger/*.h",
         "tools/flags/*.cpp",
         "tools/flags/*.h",
-        "tools/fonts/SkRandomScalerContext.cpp",
-        "tools/fonts/SkRandomScalerContext.h",
-        "tools/fonts/SkTestFontMgr.cpp",
-        "tools/fonts/SkTestFontMgr.h",
-        "tools/fonts/SkTestSVGTypeface.cpp",
-        "tools/fonts/SkTestSVGTypeface.h",
-        "tools/fonts/SkTestTypeface.cpp",
-        "tools/fonts/SkTestTypeface.h",
-        "tools/fonts/sk_tool_utils_font.cpp",
+        "tools/fonts/RandomScalerContext.cpp",
+        "tools/fonts/RandomScalerContext.h",
+        "tools/fonts/TestFontMgr.cpp",
+        "tools/fonts/TestFontMgr.h",
+        "tools/fonts/TestSVGTypeface.cpp",
+        "tools/fonts/TestSVGTypeface.h",
+        "tools/fonts/TestTypeface.cpp",
+        "tools/fonts/TestTypeface.h",
+        "tools/fonts/ToolUtilsFont.cpp",
+        "tools/fonts/test_font_index.inc",
         "tools/fonts/test_font_monospace.inc",
         "tools/fonts/test_font_sans_serif.inc",
         "tools/fonts/test_font_serif.inc",
-        "tools/fonts/test_font_index.inc",
         "tools/gpu/**/*.cpp",
         "tools/gpu/**/*.h",
+        "tools/ios_utils.h",
         "tools/random_parse_path.cpp",
         "tools/random_parse_path.h",
-        "tools/sk_pixel_iter.h",
-        "tools/sk_tool_utils.cpp",
-        "tools/sk_tool_utils.h",
         "tools/timer/*.cpp",
         "tools/timer/*.h",
         "tools/trace/*.cpp",
@@ -489,10 +530,15 @@ DM_SRCS_ALL = struct(
     ],
     exclude = [
         "gm/cgms.cpp",
+        "gm/fiddle.cpp",
+        "gm/video_decoder.cpp",
         "tests/FontMgrAndroidParserTest.cpp",  # Android-only.
         "tests/FontMgrFontConfigTest.cpp",  # FontConfig-only.
+        "tests/SkParagraphTest.cpp",  # Skipping tests for now.
         "tests/skia_test.cpp",  # Old main.
         "tools/gpu/atlastext/*",
+        "tools/gpu/d3d/*",
+        "tools/gpu/dawn/*",
         "tools/gpu/gl/angle/*",
         "tools/gpu/gl/egl/*",
         "tools/gpu/gl/glx/*",
@@ -513,48 +559,18 @@ def dm_srcs(os_conditions):
     return skia_glob(DM_SRCS_ALL) + skia_select(
         os_conditions,
         [
-            [],
+            ["tests/FontMgrFontConfigTest.cpp"],
             ["tests/FontMgrAndroidParserTest.cpp"],
             [],
         ],
     )
 
 ################################################################################
-## DM_INCLUDES
-################################################################################
-
-DM_INCLUDES = [
-    "dm",
-    "gm",
-    "experimental/pipe",
-    "experimental/svg/model",
-    "src/codec",
-    "src/core",
-    "src/effects",
-    "src/fonts",
-    "src/images",
-    "src/pathops",
-    "src/pipe/utils",
-    "src/ports",
-    "src/shaders",
-    "src/shaders/gradients",
-    "src/xml",
-    "tests",
-    "tools",
-    "tools/debugger",
-    "tools/flags",
-    "tools/fonts",
-    "tools/gpu",
-    "tools/timer",
-    "tools/trace",
-]
-
-################################################################################
 ## DM_ARGS
 ################################################################################
 
 def DM_ARGS(asan):
-    source = ["tests", "gm", "image", "lottie"]
+    source = ["gm", "image", "lottie"]
 
     # TODO(benjaminwagner): f16, pic-8888, serialize-8888, and tiles_rt-8888 fail.
     config = ["565", "8888", "pdf"]
@@ -604,6 +620,8 @@ def base_defines(os_conditions):
         "SK_BUILD_FOR_GOOGLE3",
         # Required for building dm.
         "GR_TEST_UTILS",
+        # Google3 probably doesn't want this feature yet
+        "SK_DISABLE_REDUCE_OPLIST_SPLITTING",
         # Staging flags for API changes
         # Should remove after we update golden images
         "SK_WEBP_ENCODER_USE_DEFAULT_METHOD",
@@ -611,6 +629,8 @@ def base_defines(os_conditions):
         "SK_DISABLE_LOWP_RASTER_PIPELINE",
         # JPEG is in codec_limited
         "SK_HAS_JPEG_LIBRARY",
+        # Needed for some tests in dm
+        "SK_ENABLE_SKSL_INTERPRETER",
     ] + skia_select(
         os_conditions,
         [
@@ -618,16 +638,13 @@ def base_defines(os_conditions):
             [
                 "PNG_SKIP_SETJMP_CHECK",
                 "SK_BUILD_FOR_UNIX",
-                "SK_SAMPLES_FOR_X",
-                "SK_PDF_USE_SFNTLY",
-                "SK_CODEC_DECODES_RAW",
+                "SK_R32_SHIFT=16",
                 "SK_HAS_PNG_LIBRARY",
                 "SK_HAS_WEBP_LIBRARY",
             ],
             # ANDROID
             [
                 "SK_BUILD_FOR_ANDROID",
-                "SK_CODEC_DECODES_RAW",
                 "SK_HAS_PNG_LIBRARY",
                 "SK_HAS_WEBP_LIBRARY",
             ],
@@ -667,3 +684,137 @@ def base_linkopts(os_conditions):
             ],
         ],
     )
+
+################################################################################
+## sksg_lib
+################################################################################
+
+def sksg_lib_hdrs():
+    return native.glob(["modules/sksg/include/*.h"])
+
+def sksg_lib_srcs():
+    return native.glob([
+        "modules/sksg/src/*.cpp",
+        "modules/sksg/src/*.h",
+    ])
+
+################################################################################
+## skparagraph_lib
+################################################################################
+
+def skparagraph_lib_hdrs():
+    return native.glob(["modules/skparagraph/include/*.h"])
+
+def skparagraph_lib_srcs():
+    return native.glob(["modules/skparagraph/src/*.cpp"])
+
+################################################################################
+## experimental xform
+################################################################################
+
+def exp_xform_lib_hdrs():
+    return native.glob(["experimental/xform/*.h"])
+
+def exp_xform_lib_srcs():
+    return native.glob(["experimental/xform/*.cpp"])
+
+################################################################################
+## skresources_lib
+################################################################################
+
+def skresources_lib_hdrs():
+    return ["modules/skresources/include/SkResources.h"]
+
+def skresources_lib_srcs():
+    return ["modules/skresources/src/SkResources.cpp"]
+
+################################################################################
+## skottie_lib
+################################################################################
+
+def skottie_lib_hdrs():
+    return native.glob(["modules/skottie/include/*.h"])
+
+def skottie_lib_srcs():
+    return native.glob(
+        [
+            "modules/skottie/src/*.cpp",
+            "modules/skottie/src/*.h",
+            "modules/skottie/src/effects/*.cpp",
+            "modules/skottie/src/effects/*.h",
+            "modules/skottie/src/layers/*.cpp",
+            "modules/skottie/src/layers/*.h",
+            "modules/skottie/src/layers/shapelayer/*.cpp",
+            "modules/skottie/src/layers/shapelayer/*.h",
+            "modules/skottie/src/text/*.cpp",
+            "modules/skottie/src/text/*.h",
+        ],
+        exclude = [
+            "modules/skottie/src/SkottieTest.cpp",
+            "modules/skottie/src/SkottieTool.cpp",
+        ],
+    )
+
+################################################################################
+## skottie_shaper
+################################################################################
+
+SKOTTIE_SHAPER_HDRS = [
+    "modules/skottie/src/text/SkottieShaper.h",
+]
+
+SKOTTIE_SHAPER_SRCS = [
+    "modules/skottie/src/text/SkottieShaper.cpp",
+]
+
+################################################################################
+## skottie_tool
+################################################################################
+
+SKOTTIE_TOOL_SRCS = [
+    "modules/skottie/src/SkottieTool.cpp",
+    "modules/skresources/src/SkResources.cpp",
+    "modules/skresources/include/SkResources.h",
+    # TODO(benjaminwagner): Add "flags" target.
+    "tools/flags/CommandLineFlags.cpp",
+    "tools/flags/CommandLineFlags.h",
+]
+
+################################################################################
+## SkShaper
+################################################################################
+
+SKSHAPER_HARFBUZZ_SRCS = [
+    "modules/skshaper/include/SkShaper.h",
+    "modules/skshaper/src/SkShaper.cpp",
+    "modules/skshaper/src/SkShaper_harfbuzz.cpp",
+    "modules/skshaper/src/SkShaper_primitive.cpp",
+]
+
+SKSHAPER_PRIMITIVE_SRCS = [
+    "modules/skshaper/include/SkShaper.h",
+    "modules/skshaper/src/SkShaper.cpp",
+    "modules/skshaper/src/SkShaper_primitive.cpp",
+]
+
+################################################################################
+## skottie_ios_lib
+################################################################################
+
+SKOTTIE_IOS_LIB_SRCS = [
+    "tools/skottie_ios_app/SkiaContext.mm",
+    "tools/skottie_ios_app/SkiaUIContext.mm",
+    "tools/skottie_ios_app/SkiaViewController.mm",
+    "tools/skottie_ios_app/SkottieViewController.mm",
+]
+
+SKOTTIE_IOS_LIB_HDRS = [
+    "tools/skottie_ios_app/SkiaContext.h",
+    "tools/skottie_ios_app/SkiaViewController.h",
+    "tools/skottie_ios_app/SkottieViewController.h",
+]
+
+SKOTTIE_IOS_LIB_SDK_FRAMEWORKS = [
+    "Foundation",
+    "UIKit",
+]

@@ -8,11 +8,11 @@
 #ifndef SkImage_Lazy_DEFINED
 #define SkImage_Lazy_DEFINED
 
-#include "SkImage_Base.h"
-#include "SkMutex.h"
+#include "include/private/SkMutex.h"
+#include "src/image/SkImage_Base.h"
 
 #if SK_SUPPORT_GPU
-#include "GrTextureMaker.h"
+#include "src/gpu/GrTextureMaker.h"
 #endif
 
 class SharedGenerator;
@@ -20,7 +20,8 @@ class SharedGenerator;
 class SkImage_Lazy : public SkImage_Base {
 public:
     struct Validator {
-        Validator(sk_sp<SharedGenerator>, const SkIRect* subset, sk_sp<SkColorSpace> colorSpace);
+        Validator(sk_sp<SharedGenerator>, const SkIRect* subset, const SkColorType* colorType,
+                  sk_sp<SkColorSpace> colorSpace);
 
         operator bool() const { return fSharedGenerator.get(); }
 
@@ -34,28 +35,24 @@ public:
     SkImage_Lazy(Validator* validator);
     ~SkImage_Lazy() override;
 
-    SkImageInfo onImageInfo() const override {
-        return fInfo;
-    }
-
     SkIRect onGetSubset() const override {
-        return SkIRect::MakeXYWH(fOrigin.fX, fOrigin.fY, fInfo.width(), fInfo.height());
+        return SkIRect::MakeXYWH(fOrigin.fX, fOrigin.fY, this->width(), this->height());
     }
 
     bool onReadPixels(const SkImageInfo&, void*, size_t, int srcX, int srcY,
                       CachingHint) const override;
 #if SK_SUPPORT_GPU
-    sk_sp<GrTextureProxy> asTextureProxyRef(GrContext*,
-                                            const GrSamplerState&,
-                                            SkScalar scaleAdjust[2]) const override;
-    sk_sp<SkCachedData> getPlanes(SkYUVSizeInfo*, SkYUVAIndex[4],
+    GrSurfaceProxyView refView(GrRecordingContext*, GrSamplerState) const override;
+    sk_sp<SkCachedData> getPlanes(SkYUVASizeInfo*, SkYUVAIndex[4],
                                   SkYUVColorSpace*, const void* planes[4]) override;
 #endif
     sk_sp<SkData> onRefEncoded() const override;
-    sk_sp<SkImage> onMakeSubset(const SkIRect&) const override;
+    sk_sp<SkImage> onMakeSubset(GrRecordingContext*, const SkIRect&) const override;
     bool getROPixels(SkBitmap*, CachingHint) const override;
     bool onIsLazyGenerated() const override { return true; }
-    sk_sp<SkImage> onMakeColorSpace(sk_sp<SkColorSpace>) const override;
+    sk_sp<SkImage> onMakeColorTypeAndColorSpace(GrRecordingContext*,
+                                                SkColorType, sk_sp<SkColorSpace>) const override;
+    sk_sp<SkImage> onReinterpretColorSpace(sk_sp<SkColorSpace>) const final;
 
     bool onIsValid(GrContext*) const override;
 
@@ -63,11 +60,16 @@ public:
     // Returns the texture proxy. If we're going to generate and cache the texture, we should use
     // the passed in key (if the key is valid). If genType is AllowedTexGenType::kCheap and the
     // texture is not trivial to construct, returns nullptr.
-    sk_sp<GrTextureProxy> lockTextureProxy(GrContext*,
-                                           const GrUniqueKey& key,
-                                           SkImage::CachingHint,
-                                           bool willBeMipped,
-                                           GrTextureMaker::AllowedTexGenType genType) const;
+    GrSurfaceProxyView lockTextureProxyView(GrRecordingContext*,
+                                            const GrUniqueKey& key,
+                                            SkImage::CachingHint,
+                                            bool willBeMipped) const;
+
+    // Returns the GrColorType to use with the GrTextureProxy returned from lockTextureProxy. This
+    // may be different from the color type on the image in the case where we need up upload CPU
+    // data to a texture but the GPU doesn't support the format of CPU data. In this case we convert
+    // the data to RGBA_8888 unorm on the CPU then upload that.
+    GrColorType colorTypeOfLockTextureProxy(const GrCaps* caps) const;
 
     void makeCacheKeyFromOrigKey(const GrUniqueKey& origKey, GrUniqueKey* cacheKey) const;
 #endif
@@ -75,19 +77,18 @@ public:
 private:
     class ScopedGenerator;
 
+    // Note that this->imageInfo() is not necessarily the info from the generator. It may be
+    // cropped by onMakeSubset and its color type/space may be changed by
+    // onMakeColorTypeAndColorSpace.
     sk_sp<SharedGenerator> fSharedGenerator;
-    // Note that fInfo is not necessarily the info from the generator. It may be cropped by
-    // onMakeSubset and its color space may be changed by onMakeColorSpace.
-    const SkImageInfo      fInfo;
     const SkIPoint         fOrigin;
 
     uint32_t fUniqueID;
 
-    // Repeated calls to onMakeColorSpace will result in a proliferation of unique IDs and
-    // SkImage_Lazy instances. Cache the result of the last successful onMakeColorSpace call.
-    mutable SkMutex             fOnMakeColorSpaceMutex;
-    mutable sk_sp<SkColorSpace> fOnMakeColorSpaceTarget;
-    mutable sk_sp<SkImage>      fOnMakeColorSpaceResult;
+    // Repeated calls to onMakeColorTypeAndColorSpace will result in a proliferation of unique IDs
+    // and SkImage_Lazy instances. Cache the result of the last successful call.
+    mutable SkMutex             fOnMakeColorTypeAndSpaceMutex;
+    mutable sk_sp<SkImage>      fOnMakeColorTypeAndSpaceResult;
 
 #if SK_SUPPORT_GPU
     // When the SkImage_Lazy goes away, we will iterate over all the unique keys we've used and

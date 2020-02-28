@@ -5,22 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SlideDir.h"
+#include "tools/viewer/SlideDir.h"
 
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkCubicMap.h"
-#include "SkMakeUnique.h"
-#include "SkSGColor.h"
-#include "SkSGDraw.h"
-#include "SkSGGroup.h"
-#include "SkSGPlane.h"
-#include "SkSGRect.h"
-#include "SkSGRenderNode.h"
-#include "SkSGScene.h"
-#include "SkSGText.h"
-#include "SkSGTransform.h"
-#include "SkTypeface.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkCubicMap.h"
+#include "include/core/SkTypeface.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPlane.h"
+#include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGRenderNode.h"
+#include "modules/sksg/include/SkSGScene.h"
+#include "modules/sksg/include/SkSGText.h"
+#include "modules/sksg/include/SkSGTransform.h"
+#include "tools/timer/TimeUtils.h"
 
 #include <cmath>
 #include <utility>
@@ -47,7 +46,7 @@ public:
         SkASSERT(fSlide);
     }
 
-    std::unique_ptr<sksg::Animator> makeForwardingAnimator() {
+    sk_sp<sksg::Animator> makeForwardingAnimator() {
         // Trivial sksg::Animator -> skottie::Animation tick adapter
         class ForwardingAnimator final : public sksg::Animator {
         public:
@@ -63,7 +62,7 @@ public:
             sk_sp<SlideAdapter> fAdapter;
         };
 
-        return skstd::make_unique<ForwardingAnimator>(sk_ref_sp(this));
+        return sk_make_sp<ForwardingAnimator>(sk_ref_sp(this));
     }
 
 protected:
@@ -80,9 +79,11 @@ protected:
         fSlide->draw(canvas);
     }
 
+    const RenderNode* onNodeAt(const SkPoint&) const override { return nullptr; }
+
 private:
     void tick(SkMSec t) {
-        fSlide->animate(SkAnimTimer(0, t * 1e6, SkAnimTimer::kRunning_State));
+        fSlide->animate(t * 1e6);
         this->invalidate();
     }
 
@@ -101,9 +102,10 @@ SkMatrix SlideMatrix(const sk_sp<Slide>& slide, const SkRect& dst) {
 } // namespace
 
 struct SlideDir::Rec {
-    sk_sp<Slide>           fSlide;
-    sk_sp<sksg::Transform> fTransform;
-    SkRect                 fRect;
+    sk_sp<Slide>                  fSlide;
+    sk_sp<sksg::RenderNode>       fSlideRoot;
+    sk_sp<sksg::Matrix<SkMatrix>> fMatrix;
+    SkRect                        fRect;
 };
 
 class SlideDir::FocusController final : public sksg::Animator {
@@ -112,9 +114,8 @@ public:
         : fDir(dir)
         , fRect(focusRect)
         , fTarget(nullptr)
+        , fMap(kFocusCtrl1, kFocusCtrl0)
         , fState(State::kIdle) {
-        fMap.setPts(kFocusCtrl1, kFocusCtrl0);
-
         fShadePaint = sksg::Color::Make(kFocusShade);
         fShade = sksg::Draw::Make(sksg::Plane::Make(), fShadePaint);
     }
@@ -128,9 +129,9 @@ public:
         fTarget = target;
 
         // Move the shade & slide to front.
-        fDir->fRoot->removeChild(fTarget->fTransform);
+        fDir->fRoot->removeChild(fTarget->fSlideRoot);
         fDir->fRoot->addChild(fShade);
-        fDir->fRoot->addChild(fTarget->fTransform);
+        fDir->fRoot->addChild(fTarget->fSlideRoot);
 
         fM0 = SlideMatrix(fTarget->fSlide, fTarget->fRect);
         fM1 = SlideMatrix(fTarget->fSlide, fRect);
@@ -156,7 +157,7 @@ public:
         fState = State::kUnfocusing;
     }
 
-    bool onMouse(SkScalar x, SkScalar y, sk_app::Window::InputState state, uint32_t modifiers) {
+    bool onMouse(SkScalar x, SkScalar y, skui::InputState state, skui::ModifierKey modifiers) {
         SkASSERT(fTarget);
 
         if (!fRect.contains(x, y)) {
@@ -197,7 +198,7 @@ protected:
         }
 
         SkASSERT(fTarget);
-        fTarget->fTransform->getMatrix()->setMatrix(m);
+        fTarget->fMatrix->setMatrix(m);
 
         const auto shadeOpacity = fOpacity0 + map_t * (fOpacity1 - fOpacity0);
         fShadePaint->setOpacity(shadeOpacity);
@@ -260,9 +261,9 @@ static sk_sp<sksg::RenderNode> MakeLabel(const SkString& txt,
                                          const SkMatrix& dstXform) {
     const auto size = kLabelSize / std::sqrt(dstXform.getScaleX() * dstXform.getScaleY());
     auto text = sksg::Text::Make(nullptr, txt);
-    text->setFlags(SkPaint::kAntiAlias_Flag);
+    text->setEdging(SkFont::Edging::kAntiAlias);
     text->setSize(size);
-    text->setAlign(SkPaint::kCenter_Align);
+    text->setAlign(SkTextUtils::kCenter_Align);
     text->setPosition(pos + SkPoint::Make(0, size));
 
     return sksg::Draw::Make(std::move(text), sksg::Color::Make(SK_ColorBLACK));
@@ -305,7 +306,7 @@ void SlideDir::load(SkScalar winWidth, SkScalar winHeight) {
                                                  fCellSize.height()),
                     slideRect = cell.makeInset(kPadding.width(), kPadding.height());
 
-        auto slideMatrix = SlideMatrix(slide, slideRect);
+        auto slideMatrix = sksg::Matrix<SkMatrix>::Make(SlideMatrix(slide, slideRect));
         auto adapter     = sk_make_sp<SlideAdapter>(slide);
         auto slideGrp    = sksg::Group::Make();
         slideGrp->addChild(sksg::Draw::Make(sksg::Rect::Make(SkRect::MakeIWH(slideSize.width(),
@@ -314,20 +315,20 @@ void SlideDir::load(SkScalar winWidth, SkScalar winHeight) {
         slideGrp->addChild(adapter);
         slideGrp->addChild(MakeLabel(slide->getName(),
                                      SkPoint::Make(slideSize.width() / 2, slideSize.height()),
-                                     slideMatrix));
-        auto slideTransform = sksg::Transform::Make(std::move(slideGrp), slideMatrix);
+                                     slideMatrix->getMatrix()));
+        auto slideRoot = sksg::TransformEffect::Make(std::move(slideGrp), slideMatrix);
 
         sceneAnimators.push_back(adapter->makeForwardingAnimator());
 
-        fRoot->addChild(slideTransform);
-        fRecs.push_back({ slide, slideTransform, slideRect });
+        fRoot->addChild(slideRoot);
+        fRecs.push_back({ slide, slideRoot, slideMatrix, slideRect });
     }
 
     fScene = sksg::Scene::Make(fRoot, std::move(sceneAnimators));
 
     const auto focusRect = SkRect::MakeSize(fWinSize).makeInset(kFocusInset.width(),
                                                                 kFocusInset.height());
-    fFocusController = skstd::make_unique<FocusController>(this, focusRect);
+    fFocusController = std::make_unique<FocusController>(this, focusRect);
 }
 
 void SlideDir::unload() {
@@ -351,13 +352,14 @@ void SlideDir::draw(SkCanvas* canvas) {
     fScene->render(canvas);
 }
 
-bool SlideDir::animate(const SkAnimTimer& timer) {
+bool SlideDir::animate(double nanos) {
+    SkMSec msec = TimeUtils::NanosToMSec(nanos);
     if (fTimeBase == 0) {
         // Reset the animation time.
-        fTimeBase = timer.msec();
+        fTimeBase = msec;
     }
 
-    const auto t = timer.msec() - fTimeBase;
+    const auto t = msec - fTimeBase;
     fScene->animate(t);
     fFocusController->tick(t);
 
@@ -376,9 +378,10 @@ bool SlideDir::onChar(SkUnichar c) {
     return false;
 }
 
-bool SlideDir::onMouse(SkScalar x, SkScalar y, sk_app::Window::InputState state,
-                       uint32_t modifiers) {
-    if (state == sk_app::Window::kMove_InputState || modifiers)
+bool SlideDir::onMouse(SkScalar x, SkScalar y, skui::InputState state,
+                       skui::ModifierKey modifiers) {
+    modifiers &= ~skui::ModifierKey::kFirstPress;
+    if (state == skui::InputState::kMove || skstd::Any(modifiers))
         return false;
 
     if (fFocusController->hasFocus()) {
@@ -392,11 +395,11 @@ bool SlideDir::onMouse(SkScalar x, SkScalar y, sk_app::Window::InputState state,
     static constexpr SkScalar kClickMoveTolerance = 4;
 
     switch (state) {
-    case sk_app::Window::kDown_InputState:
+    case skui::InputState::kDown:
         fTrackingCell = cell;
         fTrackingPos = SkPoint::Make(x, y);
         break;
-    case sk_app::Window::kUp_InputState:
+    case skui::InputState::kUp:
         if (cell == fTrackingCell &&
             SkPoint::Distance(fTrackingPos, SkPoint::Make(x, y)) < kClickMoveTolerance) {
             fFocusController->startFocus(cell);

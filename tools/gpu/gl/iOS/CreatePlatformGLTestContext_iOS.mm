@@ -6,7 +6,7 @@
  * found in the LICENSE file.
  */
 
-#include "gl/GLTestContext.h"
+#include "tools/gpu/gl/GLTestContext.h"
 #import <OpenGLES/EAGL.h>
 #include <dlfcn.h>
 
@@ -27,9 +27,9 @@ public:
 private:
     void destroyGLContext();
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
-    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char*) const override;
 
     EAGLContext* fEAGLContext;
@@ -42,10 +42,17 @@ IOSGLTestContext::IOSGLTestContext(IOSGLTestContext* shareContext)
 
     if (shareContext) {
         EAGLContext* iosShareContext = shareContext->fEAGLContext;
-        fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2
-                                            sharegroup: [iosShareContext sharegroup]];
+        fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3
+                                            sharegroup:[iosShareContext sharegroup]];
+        if (fEAGLContext == nil) {
+            fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2
+                                                sharegroup:[iosShareContext sharegroup]];
+        }
     } else {
-        fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+        fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES3];
+        if (fEAGLContext == nil) {
+            fEAGLContext = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES2];
+        }
     }
     SkScopeExit restorer(context_restorer());
     [EAGLContext setCurrentContext:fEAGLContext];
@@ -87,6 +94,11 @@ void IOSGLTestContext::destroyGLContext() {
     }
 }
 
+void IOSGLTestContext::onPlatformMakeNotCurrent() const {
+    if (![EAGLContext setCurrentContext:nil]) {
+        SkDebugf("Could not reset the context.\n");
+    }
+}
 
 void IOSGLTestContext::onPlatformMakeCurrent() const {
     if (![EAGLContext setCurrentContext:fEAGLContext]) {
@@ -96,12 +108,10 @@ void IOSGLTestContext::onPlatformMakeCurrent() const {
 
 std::function<void()> IOSGLTestContext::onPlatformGetAutoContextRestore() const {
     if ([EAGLContext currentContext] == fEAGLContext) {
-		return nullptr;
-	}
+        return nullptr;
+    }
     return context_restorer();
 }
-
-void IOSGLTestContext::onPlatformSwapBuffers() const { }
 
 GrGLFuncPtr IOSGLTestContext::onPlatformGetProcAddress(const char* procName) const {
     void* handle = (nullptr == fGLLibrary) ? RTLD_DEFAULT : fGLLibrary;

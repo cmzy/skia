@@ -5,8 +5,8 @@
  * found in the LICENSE file.
  */
 
-#include "gl/GLTestContext.h"
-#include "SkOnce.h"
+#include "include/private/SkOnce.h"
+#include "tools/gpu/gl/GLTestContext.h"
 
 #include <X11/Xlib.h>
 #include <GL/glx.h>
@@ -61,9 +61,9 @@ private:
     static GLXContext CreateBestContext(bool isES, Display* display, GLXFBConfig bestFbc,
                                         GLXContext glxSharedContext);
 
+    void onPlatformMakeNotCurrent() const override;
     void onPlatformMakeCurrent() const override;
     std::function<void()> onPlatformGetAutoContextRestore() const override;
-    void onPlatformSwapBuffers() const override;
     GrGLFuncPtr onPlatformGetProcAddress(const char*) const override;
 
     GLXContext fContext;
@@ -348,6 +348,12 @@ GLXContext GLXGLTestContext::CreateBestContext(bool isES, Display* display, GLXF
     return context;
 }
 
+void GLXGLTestContext::onPlatformMakeNotCurrent() const {
+    if (!glXMakeCurrent(fDisplay, None , nullptr)) {
+        SkDebugf("Could not reset the context.\n");
+    }
+}
+
 void GLXGLTestContext::onPlatformMakeCurrent() const {
     if (!glXMakeCurrent(fDisplay, fGlxPixmap, fContext)) {
         SkDebugf("Could not set the context.\n");
@@ -359,10 +365,6 @@ std::function<void()> GLXGLTestContext::onPlatformGetAutoContextRestore() const 
         return nullptr;
     }
     return context_restorer();
-}
-
-void GLXGLTestContext::onPlatformSwapBuffers() const {
-    glXSwapBuffers(fDisplay, fGlxPixmap);
 }
 
 GrGLFuncPtr GLXGLTestContext::onPlatformGetProcAddress(const char* procName) const {

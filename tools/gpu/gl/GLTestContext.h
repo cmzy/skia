@@ -8,8 +8,8 @@
 #ifndef GLTestContext_DEFINED
 #define GLTestContext_DEFINED
 
-#include "TestContext.h"
-#include "gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "tools/gpu/TestContext.h"
 
 namespace sk_gpu_test {
 /**
@@ -32,9 +32,8 @@ public:
     virtual void destroyEGLImage(GrEGLImage) const { }
 
     /** Used for testing GL_TEXTURE_RECTANGLE integration. */
-    GrGLint createTextureRectangle(int width, int height, GrGLenum internalFormat,
-                                   GrGLenum externalFormat, GrGLenum externalType,
-                                   GrGLvoid *data);
+    GrGLuint createTextureRectangle(int width, int height, GrGLenum internalFormat,
+                                    GrGLenum externalFormat, GrGLenum externalType, GrGLvoid* data);
 
     /**
      * Used for testing EGLImage integration. Takes a EGLImage and wraps it in a
@@ -43,9 +42,6 @@ public:
     virtual GrGLuint eglImageToExternalTexture(GrEGLImage) const { return 0; }
 
     void testAbandon() override;
-
-    /** Ensures all work is submitted to the GPU for execution. */
-    void submit() override;
 
     /** Wait until all GPU work is finished. */
     void finish() override;
@@ -78,9 +74,9 @@ protected:
     GLTestContext();
 
     /*
-     * Methods that sublcasses must call from their constructors and destructors.
+     * Methods that subclasses must call from their constructors and destructors.
      */
-    void init(sk_sp<const GrGLInterface>, std::unique_ptr<FenceSync> = nullptr);
+    void init(sk_sp<const GrGLInterface>);
 
     void teardown() override;
 

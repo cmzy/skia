@@ -2,13 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-DOCKER_IMAGE = 'gcr.io/skia-public/emsdk-release:1.38.6_jre'
+DOCKER_IMAGE = 'gcr.io/skia-public/emsdk-base:1.39.6_v1'
 INNER_BUILD_SCRIPT = '/SRC/skia/infra/pathkit/build_pathkit.sh'
-
-BUILD_PRODUCTS_ISOLATE_WHITELIST_WASM = [
-  'pathkit.*'
-]
-
 
 def compile_fn(api, checkout_root, _ignore):
   out_dir = api.vars.cache_dir.join('docker', 'pathkit')
@@ -32,22 +27,30 @@ def compile_fn(api, checkout_root, _ignore):
   # toolchain changes.
   # Of note, the wasm build doesn't re-use any intermediate steps from the
   # previous builds, so it's essentially a build from scratch every time.
-  cmd = ['docker', 'run', '--rm', '-v', '%s:/SRC' % checkout_root,
-         '-v', '%s:/OUT' % out_dir,
+  cmd = ['docker', 'run', '--rm', '--volume', '%s:/SRC' % checkout_root,
+         '--volume', '%s:/OUT' % out_dir,
          DOCKER_IMAGE, INNER_BUILD_SCRIPT]
   if configuration == 'Debug':
     cmd.append('debug') # It defaults to Release
   if target_arch == 'asmjs':
     cmd.append('asm.js') # It defaults to WASM
-  api.run(
-    api.step,
-    'Build PathKit with Docker',
-    cmd=cmd)
+  # Override DOCKER_CONFIG set by Kitchen.
+  env = {'DOCKER_CONFIG': '/home/chrome-bot/.docker'}
+  with api.env(env):
+    api.run(
+        api.step,
+        'Build PathKit with Docker',
+        cmd=cmd)
 
 
-def copy_extra_build_products(api, _ignore, dst):
+PATHKIT_BUILD_PRODUCTS = [
+  'pathkit.*'
+]
+
+
+def copy_build_products(api, _ignore, dst):
   out_dir = api.vars.cache_dir.join('docker', 'pathkit')
-  # We don't use the normal copy_build_products because it uses
+  # We don't use the normal copy_listed_files because it uses
   # shutil.move, which attempts to delete the previous file, which
   # doesn't work because the docker created outputs are read-only and
   # owned by root (aka only docker images). It's likely safe to change
@@ -64,7 +67,7 @@ import sys
 
 src = sys.argv[1]
 dst = sys.argv[2]
-build_products_whitelist = %s
+build_products = %s
 
 try:
   os.makedirs(dst)
@@ -72,7 +75,7 @@ except OSError as e:
   if e.errno != errno.EEXIST:
     raise
 
-for pattern in build_products_whitelist:
+for pattern in build_products:
   path = os.path.join(src, pattern)
   for f in glob.glob(path):
     dst_path = os.path.join(dst, os.path.relpath(f, src))
@@ -83,7 +86,6 @@ for pattern in build_products_whitelist:
     # ownership), we'd rather not keep those around. copyfile doesn't
     # keep the metadata around, so that helps us.
     shutil.copyfile(f, dst_path)
-''' % str(BUILD_PRODUCTS_ISOLATE_WHITELIST_WASM),
+''' % str(PATHKIT_BUILD_PRODUCTS),
       args=[out_dir, dst],
       infra_step=True)
-

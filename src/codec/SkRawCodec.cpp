@@ -5,23 +5,21 @@
  * found in the LICENSE file.
  */
 
-#include "SkCodec.h"
-#include "SkCodecPriv.h"
-#include "SkColorSpacePriv.h"
-#include "SkColorData.h"
-#include "SkData.h"
-#include "SkJpegCodec.h"
-#include "SkMakeUnique.h"
-#include "SkMutex.h"
-#include "SkRawCodec.h"
-#include "SkRefCnt.h"
-#include "SkStream.h"
-#include "SkStreamPriv.h"
-#include "SkSwizzler.h"
-#include "SkTArray.h"
-#include "SkTaskGroup.h"
-#include "SkTemplates.h"
-#include "SkTypes.h"
+#include "include/codec/SkCodec.h"
+#include "include/core/SkData.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkStream.h"
+#include "include/core/SkTypes.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkMutex.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTemplates.h"
+#include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkJpegCodec.h"
+#include "src/codec/SkRawCodec.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkStreamPriv.h"
+#include "src/core/SkTaskGroup.h"
 
 #include "dng_area_task.h"
 #include "dng_color_space.h"
@@ -114,10 +112,10 @@ public:
                 try {
                     task.ProcessOnThread(taskIndex, taskAreas[taskIndex], tileSize, this->Sniffer());
                 } catch (dng_exception& exception) {
-                    SkAutoMutexAcquire lock(mutex);
+                    SkAutoMutexExclusive lock(mutex);
                     exceptions.push_back(exception);
                 } catch (...) {
-                    SkAutoMutexAcquire lock(mutex);
+                    SkAutoMutexExclusive lock(mutex);
                     exceptions.push_back(dng_exception(dng_error_unknown));
                 }
             });
@@ -259,7 +257,7 @@ public:
                 data = SkData::MakeSubset(data.get(), 0, bytesRead);
             }
         } else {
-            const size_t alreadyBuffered = SkTMin(fStreamBuffer.bytesWritten() - offset, size);
+            const size_t alreadyBuffered = std::min(fStreamBuffer.bytesWritten() - offset, size);
             if (alreadyBuffered > 0 &&
                 !fStreamBuffer.read(data->writable_data(), offset, alreadyBuffered)) {
                 return nullptr;
@@ -303,7 +301,7 @@ private:
         // Try to read at least 8192 bytes to avoid to many small reads.
         const size_t kMinSizeToRead = 8192;
         const size_t sizeRequested = newSize - fStreamBuffer.bytesWritten();
-        const size_t sizeToRead = SkTMax(kMinSizeToRead, sizeRequested);
+        const size_t sizeToRead = std::max(kMinSizeToRead, sizeRequested);
         SkAutoSTMalloc<kMinSizeToRead, uint8> tempBuffer(sizeToRead);
         const size_t bytesRead = fStream->read(tempBuffer.get(), sizeToRead);
         if (bytesRead < sizeRequested) {
@@ -362,7 +360,7 @@ public:
 
         // This will allow read less than the requested "size", because the JPEG codec wants to
         // handle also a partial JPEG file.
-        const size_t bytesToRead = SkTMin(sum, fStream->getLength()) - offset;
+        const size_t bytesToRead = std::min(sum, fStream->getLength()) - offset;
         if (bytesToRead == 0) {
             return nullptr;
         }
@@ -465,7 +463,7 @@ public:
         }
 
         // DNG SDK preserves the aspect ratio, so it only needs to know the longer dimension.
-        const int preferredSize = SkTMax(width, height);
+        const int preferredSize = std::max(width, height);
         try {
             // render() takes ownership of fHost, fInfo, fNegative and fDngStream when available.
             std::unique_ptr<dng_host> host(fHost.release());
@@ -496,7 +494,7 @@ public:
             render.SetFinalPixelType(ttByte);
 
             dng_point stage3_size = negative->Stage3Image()->Size();
-            render.SetMaximumSize(SkTMax(stage3_size.h, stage3_size.v));
+            render.SetMaximumSize(std::max(stage3_size.h, stage3_size.v));
 
             return render.Render();
         } catch (...) {
@@ -613,17 +611,6 @@ private:
     bool fIsXtransImage;
 };
 
-static constexpr skcms_Matrix3x3 gAdobe_RGB_to_XYZD50 = {{
-    // ICC fixed-point (16.16) repesentation of:
-    // 0.60974, 0.20528, 0.14919,
-    // 0.31111, 0.62567, 0.06322,
-    // 0.01947, 0.06087, 0.74457,
-    { SkFixedToFloat(0x9c18), SkFixedToFloat(0x348d), SkFixedToFloat(0x2631) }, // Rx, Gx, Bx
-    { SkFixedToFloat(0x4fa5), SkFixedToFloat(0xa02c), SkFixedToFloat(0x102f) }, // Ry, Gy, By
-    { SkFixedToFloat(0x04fc), SkFixedToFloat(0x0f95), SkFixedToFloat(0xbe9c) }, // Rz, Gz, Bz
-}};
-
-
 /*
  * Tries to handle the image with PIEX. If PIEX returns kOk and finds the preview image, create a
  * SkJpegCodec. If PIEX returns kFail, then the file is invalid, return nullptr. In other cases,
@@ -650,12 +637,10 @@ std::unique_ptr<SkCodec> SkRawCodec::MakeFromStream(std::unique_ptr<SkStream> st
 
         std::unique_ptr<SkEncodedInfo::ICCProfile> profile;
         if (imageData.color_space == ::piex::PreviewImageData::kAdobeRgb) {
-            constexpr skcms_TransferFunction twoDotTwo =
-                    { 2.2f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
             skcms_ICCProfile skcmsProfile;
             skcms_Init(&skcmsProfile);
-            skcms_SetTransferFunction(&skcmsProfile, &twoDotTwo);
-            skcms_SetXYZD50(&skcmsProfile, &gAdobe_RGB_to_XYZD50);
+            skcms_SetTransferFunction(&skcmsProfile, &SkNamedTransferFn::k2Dot2);
+            skcms_SetXYZD50(&skcmsProfile, &SkNamedGamut::kAdobeRGB);
             profile = SkEncodedInfo::ICCProfile::Make(skcmsProfile);
         }
 
@@ -697,17 +682,6 @@ std::unique_ptr<SkCodec> SkRawCodec::MakeFromStream(std::unique_ptr<SkStream> st
 SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
                                         size_t dstRowBytes, const Options& options,
                                         int* rowsDecoded) {
-    SkImageInfo swizzlerInfo = dstInfo;
-    std::unique_ptr<uint32_t[]> xformBuffer = nullptr;
-    if (this->colorXform()) {
-        swizzlerInfo = swizzlerInfo.makeColorType(kRGBA_8888_SkColorType);
-        xformBuffer.reset(new uint32_t[dstInfo.width()]);
-    }
-
-    std::unique_ptr<SkSwizzler> swizzler(SkSwizzler::CreateSwizzler(
-            this->getEncodedInfo(), nullptr, swizzlerInfo, options));
-    SkASSERT(swizzler);
-
     const int width = dstInfo.width();
     const int height = dstInfo.height();
     std::unique_ptr<dng_image> image(fDngImage->render(width, height));
@@ -737,6 +711,20 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
     buffer.fPixelSize = sizeof(uint8_t);
     buffer.fRowStep = width * 3;
 
+    constexpr auto srcFormat = skcms_PixelFormat_RGB_888;
+    skcms_PixelFormat dstFormat;
+    if (!sk_select_xform_format(dstInfo.colorType(), false, &dstFormat)) {
+        return kInvalidConversion;
+    }
+
+    const skcms_ICCProfile* const srcProfile = this->getEncodedInfo().profile();
+    skcms_ICCProfile dstProfileStorage;
+    const skcms_ICCProfile* dstProfile = nullptr;
+    if (auto cs = dstInfo.colorSpace()) {
+        cs->toProfile(&dstProfileStorage);
+        dstProfile = &dstProfileStorage;
+    }
+
     for (int i = 0; i < height; ++i) {
         buffer.fArea = dng_rect(i, 0, i + 1, width);
 
@@ -747,13 +735,14 @@ SkCodec::Result SkRawCodec::onGetPixels(const SkImageInfo& dstInfo, void* dst,
             return kIncompleteInput;
         }
 
-        if (this->colorXform()) {
-            swizzler->swizzle(xformBuffer.get(), &srcRow[0]);
-
-            this->applyColorXform(dstRow, xformBuffer.get(), dstInfo.width());
-        } else {
-            swizzler->swizzle(dstRow, &srcRow[0]);
+        if (!skcms_Transform(&srcRow[0], srcFormat, skcms_AlphaFormat_Unpremul, srcProfile,
+                             dstRow,     dstFormat, skcms_AlphaFormat_Unpremul, dstProfile,
+                             dstInfo.width())) {
+            SkDebugf("failed to transform\n");
+            *rowsDecoded = i;
+            return kInternalError;
         }
+
         dstRow = SkTAddOffset<void>(dstRow, dstRowBytes);
     }
     return kSuccess;
@@ -770,7 +759,7 @@ SkISize SkRawCodec::onGetScaledDimensions(float desiredScale) const {
     }
 
     // Limits the minimum size to be 80 on the short edge.
-    const float shortEdge = static_cast<float>(SkTMin(dim.fWidth, dim.fHeight));
+    const float shortEdge = static_cast<float>(std::min(dim.fWidth, dim.fHeight));
     if (desiredScale < 80.f / shortEdge) {
         desiredScale = 80.f / shortEdge;
     }
@@ -789,8 +778,8 @@ SkISize SkRawCodec::onGetScaledDimensions(float desiredScale) const {
 
 bool SkRawCodec::onDimensionsSupported(const SkISize& dim) {
     const SkISize fullDim = this->dimensions();
-    const float fullShortEdge = static_cast<float>(SkTMin(fullDim.fWidth, fullDim.fHeight));
-    const float shortEdge = static_cast<float>(SkTMin(dim.fWidth, dim.fHeight));
+    const float fullShortEdge = static_cast<float>(std::min(fullDim.fWidth, fullDim.fHeight));
+    const float shortEdge = static_cast<float>(std::min(dim.fWidth, dim.fHeight));
 
     SkISize sizeFloor = this->onGetScaledDimensions(1.f / std::floor(fullShortEdge / shortEdge));
     SkISize sizeCeil = this->onGetScaledDimensions(1.f / std::ceil(fullShortEdge / shortEdge));

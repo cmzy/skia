@@ -21,11 +21,12 @@ RUN git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git /
 
 WORKDIR /root
 
-RUN wget -O /root/android-ndk-r18-linux-x86_64.zip https://storage.googleapis.com/skia-cdn/android-sdk/android-ndk-r18-linux-x86_64.zip && \
-    unzip /root/android-ndk-r18-linux-x86_64.zip && \
-    rm -f /root/android-ndk-r18-linux-x86_64.zip
+RUN wget -O /root/android-ndk-r20-linux-x86_64.zip https://dl.google.com/android/repository/android-ndk-r20-linux-x86_64.zip && \
+    unzip /root/android-ndk-r20-linux-x86_64.zip && \
+    rm -f /root/android-ndk-r20-linux-x86_64.zip
 
-RUN sdkmanager ndk-bundle "lldb;3.1" "cmake;3.6.4111459"
+# "yes" agrees to the license. (You might think it's waiting for input, but it's not.)
+RUN yes | sdkmanager ndk-bundle "lldb;3.1" "cmake;3.6.4111459"
 
 RUN update-alternatives --install /usr/bin/cc  cc  /usr/lib/llvm-6.0/bin/clang   20 && \
     update-alternatives --install /usr/bin/c++ c++ /usr/lib/llvm-6.0/bin/clang++ 20
@@ -36,4 +37,4 @@ ENV CC="/usr/lib/llvm-6.0/bin/clang" \
 
 ENV PATH=$PATH:/opt/depot_tools
 
-ENV ANDROID_NDK=/root/android-ndk-r18
+ENV ANDROID_NDK=/root/android-ndk-r20

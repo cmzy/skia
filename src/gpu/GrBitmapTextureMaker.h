@@ -8,29 +8,29 @@
 #ifndef GrBitmapTextureMaker_DEFINED
 #define GrBitmapTextureMaker_DEFINED
 
-#include "GrTextureMaker.h"
-#include "SkBitmap.h"
+#include "include/core/SkBitmap.h"
+#include "src/gpu/GrTextureMaker.h"
 
 /** This class manages the conversion of SW-backed bitmaps to GrTextures. If the input bitmap is
     non-volatile the texture is cached using a key created from the pixels' image id and the
     subset of the pixelref specified by the bitmap. */
 class GrBitmapTextureMaker : public GrTextureMaker {
 public:
-    GrBitmapTextureMaker(GrContext* context, const SkBitmap& bitmap);
+    enum class Cached { kNo, kYes };
 
-protected:
-    sk_sp<GrTextureProxy> refOriginalTextureProxy(bool willBeMipped,
-                                                  AllowedTexGenType onlyIfFast) override;
-
-    void makeCopyKey(const CopyParams& copyParams, GrUniqueKey* copyKey) override;
-    void didCacheCopy(const GrUniqueKey& copyKey, uint32_t contextUniqueID) override;
-
-    SkAlphaType alphaType() const override;
-    SkColorSpace* colorSpace() const override;
+    GrBitmapTextureMaker(GrRecordingContext* context, const SkBitmap& bitmap,
+                         Cached cached = Cached::kNo, SkBackingFit = SkBackingFit::kExact,
+                         bool useDecal = false);
 
 private:
-    const SkBitmap  fBitmap;
-    GrUniqueKey     fOriginalKey;
+    GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped) override;
+
+    void makeMipMappedKey(GrUniqueKey* mipMappedKey) override;
+    void didCacheMipMappedCopy(const GrUniqueKey& mipMappedKey, uint32_t contextUniqueID) override;
+
+    const SkBitmap     fBitmap;
+    const SkBackingFit fFit;
+    GrUniqueKey        fOriginalKey;
 
     typedef GrTextureMaker INHERITED;
 };

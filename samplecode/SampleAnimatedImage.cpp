@@ -5,44 +5,44 @@
  * found in the LICENSE file.
  */
 
-#include "SkAndroidCodec.h"
-#include "SkAnimatedImage.h"
-#include "SkAnimTimer.h"
-#include "SkCanvas.h"
-#include "SkPaint.h"
-#include "SkPictureRecorder.h"
-#include "SkRect.h"
-#include "SkScalar.h"
-#include "SkString.h"
+#include "include/android/SkAnimatedImage.h"
+#include "include/codec/SkAndroidCodec.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPictureRecorder.h"
+#include "include/core/SkRect.h"
+#include "include/core/SkScalar.h"
+#include "include/core/SkString.h"
+#include "tools/timer/TimeUtils.h"
 
-#include "Sample.h"
-#include "Resources.h"
+#include "samplecode/Sample.h"
+#include "tools/Resources.h"
 
 static constexpr char kPauseKey = 'p';
 static constexpr char kResetKey = 'r';
 
 class SampleAnimatedImage : public Sample {
-public:
-    SampleAnimatedImage()
-        : INHERITED()
-        , fYOffset(0)
-    {}
+    sk_sp<SkAnimatedImage>  fImage;
+    sk_sp<SkDrawable>       fDrawable;
+    SkScalar                fYOffset = 0;
+    bool                    fRunning = false;
+    double                  fCurrentTime = 0.0;
+    double                  fLastWallTime = 0.0;
+    double                  fTimeToShowNextFrame = 0.0;
 
-protected:
     void onDrawBackground(SkCanvas* canvas) override {
-        SkPaint paint;
-        paint.setAntiAlias(true);
-        constexpr SkScalar kTextSize = 20;
-        paint.setTextSize(kTextSize);
+        SkFont font;
+        font.setSize(20);
 
         SkString str = SkStringPrintf("Press '%c' to start/pause; '%c' to reset.",
                 kPauseKey, kResetKey);
         const char* text = str.c_str();
         SkRect bounds;
-        paint.measureText(text, strlen(text), &bounds);
+        font.measureText(text, strlen(text), SkTextEncoding::kUTF8, &bounds);
         fYOffset = bounds.height();
 
-        canvas->drawText(text, strlen(text), 5, fYOffset, paint);
+        canvas->drawSimpleText(text, strlen(text), SkTextEncoding::kUTF8, 5, fYOffset, font, SkPaint());
         fYOffset *= 2;
     }
 
@@ -57,13 +57,13 @@ protected:
         canvas->drawDrawable(fDrawable.get(), fImage->getBounds().width(), 0);
     }
 
-    bool onAnimate(const SkAnimTimer& animTimer) override {
+    bool onAnimate(double nanos) override {
         if (!fImage) {
             return false;
         }
 
         const double lastWallTime = fLastWallTime;
-        fLastWallTime = animTimer.msec();
+        fLastWallTime = TimeUtils::NanosToMSec(nanos);
 
         if (fRunning) {
             fCurrentTime += fLastWallTime - lastWallTime;
@@ -97,14 +97,10 @@ protected:
         fDrawable = recorder.finishRecordingAsDrawable();
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "AnimatedImage");
-            return true;
-        }
+    SkString name() override { return SkString("AnimatedImage"); }
 
-        SkUnichar uni;
-        if (fImage && Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
+        if (fImage) {
             switch (uni) {
                 case kPauseKey:
                     fRunning = !fRunning;
@@ -122,20 +118,8 @@ protected:
                     break;
             }
         }
-        return this->INHERITED::onQuery(evt);
+        return false;
     }
-
-private:
-    sk_sp<SkAnimatedImage>  fImage;
-    sk_sp<SkDrawable>       fDrawable;
-    SkScalar                fYOffset;
-    bool                    fRunning = false;
-    double                  fCurrentTime = 0.0;
-    double                  fLastWallTime = 0.0;
-    double                  fTimeToShowNextFrame = 0.0;
-    typedef Sample INHERITED;
 };
-
-///////////////////////////////////////////////////////////////////////////////
 
 DEF_SAMPLE( return new SampleAnimatedImage(); )

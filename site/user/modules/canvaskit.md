@@ -29,12 +29,12 @@ Samples
     margin: 2px;
   }
 
-  #patheffect, #ink {
+  #patheffect, #ink, #shaping {
     width: 400px;
     height: 400px;
   }
 
-  #sk_legos, #sk_drinks, #sk_party, #sk_onboarding {
+  #sk_legos, #sk_drinks, #sk_party, #sk_onboarding, #shader1 {
     width: 300px;
     height: 300px;
   }
@@ -51,11 +51,11 @@ Samples
 </style>
 
 <div id=demo>
-  <h3>An Interactive Path</h3>
+  <h3>Go beyond the HTML Canvas2D</h3>
   <figure>
     <canvas id=patheffect width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/79bc0e7a670ef4aa45254acfcd537ffe787b5b3333c45b4107e1ab8c898fc834"
+      <a href="https://jsfiddle.skia.org/canvaskit/ea89749ae8c90bce807ea2e7e34fb7b09b950cee70d9db0a9cdfd2d67bd48ef0"
           target=_blank rel=noopener>
         Star JSFiddle</a>
     </figcaption>
@@ -63,28 +63,44 @@ Samples
   <figure>
     <canvas id=ink width=400 height=400></canvas>
     <figcaption>
-      <a href="https://jsfiddle.skia.org/canvaskit/4279ce869f9a08b04288a81d740eef5b3d54191f30a4aea510a64596118a5d62"
+      <a href="https://jsfiddle.skia.org/canvaskit/43475699d6d7d3d7dad1004c29f84015752a6a6dee2bb90f2e891b53e31d45cc"
           target=_blank rel=noopener>
         Ink JSFiddle</a>
     </figcaption>
   </figure>
 
   <h3>Skottie (click for fiddles)</h3>
-  <a href="https://jsfiddle.skia.org/canvaskit/00ad983919d3925499345202c2e8e28da1c127093593ae86e268e519c6c2b1bc"
+  <a href="https://jsfiddle.skia.org/canvaskit/092690b273b41076d2f00f0d43d004893d6bb9992c387c0385efa8e6f6bc83d7"
      target=_blank rel=noopener>
     <canvas id=sk_legos width=300 height=300></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/93a4d65d8b467053fbed26a6bc08968f9ff9f5986528ad9583e7fe2a0d98192f"
+  <a href="https://jsfiddle.skia.org/canvaskit/e7ac983d9859f89aff1b6d385190919202c2eb53d028a79992892cacceffd209"
      target=_blank rel=noopener>
     <canvas id=sk_drinks width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/9d2ce26e5e14b6d72701466ee46c60aadecc3650ed709a57e35a04fc8f98366e"
+  <a href="https://jsfiddle.skia.org/canvaskit/0e06547181759731e7369d3e3613222a0826692f48c41b16504ed68d671583e1"
      target=_blank rel=noopener>
     <canvas id=sk_party width=500 height=500></canvas>
   </a>
-  <a href="https://jsfiddle.skia.org/canvaskit/13d92f4a7238425dcb68211010a1c313e18e429aae3a81ff630788307e31771e"
+  <a href="https://jsfiddle.skia.org/canvaskit/be3fc1c5c351e7f43cc2840033f80b44feb3475925264808f321bb9e2a21174a"
      target=_blank rel=noopener>
     <canvas id=sk_onboarding width=500 height=500></canvas>
+  </a>
+
+  <h3>SkParagraph (using ICU and Harfbuzz)</h3>
+  <figure>
+    <canvas id=shaping width=500 height=500></canvas>
+    <figcaption>
+      <a href="https://jsfiddle.skia.org/canvaskit/56cb197c724dfdfad0c3d8133d4fcab587e4c4e7f31576e62c17251637d3745c"
+          target=_blank rel=noopener>
+        SkParagraph JSFiddle</a>
+    </figcaption>
+  </figure>
+
+  <h3>SKSL for writing custom shaders</h3>
+  <a href="https://jsfiddle.skia.org/canvaskit/33ff9bed883cd5742b4770169da0b36fb0cbc18fd395ddd9563213e178362d30"
+    target=_blank rel=noopener>
+    <canvas id=shader1 width=512 height=512></canvas>
   </a>
 
 </div>
@@ -93,10 +109,13 @@ Samples
 (function() {
   // Tries to load the WASM version if supported, shows error otherwise
   let s = document.createElement('script');
-  var locate_file = '';
+  let locate_file = '';
+  // Hey, if you are looking at this code for an example of how to do it yourself, please use
+  // an actual CDN, such as https://unpkg.com/canvaskit-wasm - it will have better reliability
+  // and niceties like brotli compression.
   if (window.WebAssembly && typeof window.WebAssembly.compile === 'function') {
     console.log('WebAssembly is supported!');
-    locate_file = 'https://storage.googleapis.com/skia-cdn/canvaskit-wasm/0.1.0/bin/';
+    locate_file = 'https://particles.skia.org/static/';
   } else {
     console.log('WebAssembly is not supported (yet) on this browser.');
     document.getElementById('demo').innerHTML = "<div>WASM not supported by your browser. Try a recent version of Chrome, Firefox, Edge, or Safari.</div>";
@@ -104,25 +123,26 @@ Samples
   }
   s.src = locate_file + 'canvaskit.js';
   s.onload = () => {
-  var CanvasKit = null;
-  var legoJSON = null;
-  var drinksJSON = null;
-  var confettiJSON = null;
-  var onboardingJSON = null;
-  var fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
+  let CanvasKit = null;
+  let legoJSON = null;
+  let drinksJSON = null;
+  let confettiJSON = null;
+  let onboardingJSON = null;
+  let fullBounds = {fLeft: 0, fTop: 0, fRight: 500, fBottom: 500};
   CanvasKitInit({
     locateFile: (file) => locate_file + file,
-  }).then((CK) => {
-    CK.initFonts();
+  }).ready().then((CK) => {
     CanvasKit = CK;
     DrawingExample(CanvasKit);
     InkExample(CanvasKit);
+    ShapingExample(CanvasKit);
      // Set bounds to fix the 4:3 resolution of the legos
     SkottieExample(CanvasKit, 'sk_legos', legoJSON, {fLeft: -50, fTop: 0, fRight: 350, fBottom: 300});
     // Re-size to fit
     SkottieExample(CanvasKit, 'sk_drinks', drinksJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_party', confettiJSON, fullBounds);
     SkottieExample(CanvasKit, 'sk_onboarding', onboardingJSON, fullBounds);
+    ShaderExample1(CanvasKit);
   });
 
   fetch('https://storage.googleapis.com/skia-cdn/misc/lego_loader.json').then((resp) => {
@@ -162,7 +182,7 @@ Samples
   }
 
   function DrawingExample(CanvasKit) {
-    const surface = CanvasKit.getWebGLSurface('patheffect');
+    const surface = CanvasKit.MakeCanvasSurface('patheffect');
     if (!surface) {
       console.log('Could not make surface');
     }
@@ -174,8 +194,9 @@ Samples
 
     const textPaint = new CanvasKit.SkPaint();
     textPaint.setColor(CanvasKit.Color(40, 0, 0, 1.0));
-    textPaint.setTextSize(30);
     textPaint.setAntiAlias(true);
+
+    const textFont = new CanvasKit.SkFont(null, 30);
 
     let i = 0;
 
@@ -189,7 +210,7 @@ Samples
       i++;
 
       paint.setPathEffect(dpe);
-      paint.setStyle(CanvasKit.PaintStyle.STROKE);
+      paint.setStyle(CanvasKit.PaintStyle.Stroke);
       paint.setStrokeWidth(5.0 + -3 * Math.cos(i/30));
       paint.setAntiAlias(true);
       paint.setColor(CanvasKit.Color(66, 129, 164, 1.0));
@@ -197,7 +218,7 @@ Samples
       canvas.clear(CanvasKit.Color(255, 255, 255, 1.0));
 
       canvas.drawPath(path, paint);
-      canvas.drawText('Try Clicking!', 10, 380, textPaint);
+      canvas.drawText('Try Clicking!', 10, 380, textPaint, textFont);
       canvas.flush();
       dpe.delete();
       path.delete();
@@ -217,12 +238,13 @@ Samples
     document.getElementById('patheffect').addEventListener('pointerdown', interact);
     preventScrolling(document.getElementById('patheffect'));
 
-    // A client would need to delete this if it didn't go on for ever.
-    //paint.delete();
+    // A client would need to delete this if it didn't go on forever.
+    // font.delete();
+    // paint.delete();
   }
 
   function InkExample(CanvasKit) {
-    const surface = CanvasKit.getWebGLSurface('ink');
+    const surface = CanvasKit.MakeCanvasSurface('ink');
     if (!surface) {
       console.log('Could not make surface');
     }
@@ -233,7 +255,7 @@ Samples
     let paint = new CanvasKit.SkPaint();
     paint.setAntiAlias(true);
     paint.setColor(CanvasKit.Color(0, 0, 0, 1.0));
-    paint.setStyle(CanvasKit.PaintStyle.STROKE);
+    paint.setStyle(CanvasKit.PaintStyle.Stroke);
     paint.setStrokeWidth(4.0);
     // This effect smooths out the drawn lines a bit.
     paint.setPathEffect(CanvasKit.MakeSkCornerPathEffect(50));
@@ -295,6 +317,102 @@ Samples
     window.requestAnimationFrame(drawFrame);
   }
 
+  function ShapingExample(CanvasKit) {
+    const surface = CanvasKit.MakeCanvasSurface('shaping');
+    if (!surface) {
+      console.log('Could not make surface');
+      return;
+    }
+    let robotoData = null;
+    fetch('https://storage.googleapis.com/skia-cdn/google-web-fonts/Roboto-Regular.ttf').then((resp) => {
+      resp.arrayBuffer().then((buffer) => {
+        robotoData = buffer;
+        requestAnimationFrame(drawFrame);
+      });
+    });
+
+    let emojiData = null;
+    fetch('https://storage.googleapis.com/skia-cdn/misc/NotoColorEmoji.ttf').then((resp) => {
+      resp.arrayBuffer().then((buffer) => {
+        emojiData = buffer;
+        requestAnimationFrame(drawFrame);
+      });
+    });
+
+    const skcanvas = surface.getCanvas();
+
+    const font = new CanvasKit.SkFont(null, 18);
+    const fontPaint = new CanvasKit.SkPaint();
+    fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
+    fontPaint.setAntiAlias(true);
+
+    skcanvas.drawText(`Fetching Font data...`, 5, 450, fontPaint, font);
+    surface.flush();
+
+    const context = CanvasKit.currentContext();
+
+    let paragraph = null;
+    let X = 10;
+    let Y = 10;
+    const str = 'The quick brown fox 🦊 ate a zesty hamburgerfons 🍔.\nThe 👩‍👩‍👧‍👧 laughed.';
+
+    function drawFrame() {
+      if (robotoData && emojiData && !paragraph) {
+        const fontMgr = CanvasKit.SkFontMgr.FromData([robotoData, emojiData]);
+
+        const paraStyle = new CanvasKit.ParagraphStyle({
+          textStyle: {
+            color: CanvasKit.BLACK,
+            fontFamilies: ['Roboto', 'Noto Color Emoji'],
+            fontSize: 50,
+          },
+          textAlign: CanvasKit.TextAlign.Left,
+          maxLines: 7,
+          ellipsis: '...',
+        });
+
+        const builder = CanvasKit.ParagraphBuilder.Make(paraStyle, fontMgr);
+        builder.addText(str);
+        paragraph = builder.build();
+      }
+      if (!paragraph) {
+        requestAnimationFrame(drawFrame);
+        return;
+      }
+      CanvasKit.setCurrentContext(context);
+      skcanvas.clear(CanvasKit.WHITE);
+
+      const wrapTo = 350 + 150 * Math.sin(Date.now() / 2000);
+      paragraph.layout(wrapTo);
+      skcanvas.drawParagraph(paragraph, 0, 0);
+      skcanvas.drawLine(wrapTo, 0, wrapTo, 400, fontPaint);
+
+      let posA = paragraph.getGlyphPositionAtCoordinate(X, Y);
+      const cp = str.codePointAt(posA.pos);
+      if (cp) {
+        const glyph = String.fromCodePoint(cp);
+        skcanvas.drawText(`At (${X.toFixed(2)}, ${Y.toFixed(2)}) glyph is '${glyph}'`, 5, 450, fontPaint, font);
+      }
+
+      surface.flush();
+      requestAnimationFrame(drawFrame);
+    }
+
+    // Make animation interactive
+    let interact = (e) => {
+      // multiply by 4/5 to account for the difference in the canvas width and the CSS width.
+      // The 10 accounts for where the mouse actually is compared to where it is drawn.
+      X = (e.offsetX * 4/5) - 10;
+      Y = e.offsetY * 4/5;
+    };
+    document.getElementById('shaping').addEventListener('pointermove', interact);
+    document.getElementById('shaping').addEventListener('pointerdown', interact);
+    document.getElementById('shaping').addEventListener('lostpointercapture', interact);
+    document.getElementById('shaping').addEventListener('pointerup', interact);
+    preventScrolling(document.getElementById('shaping'));
+    window.requestAnimationFrame(drawFrame);
+  }
+
   function starPath(CanvasKit, X=128, Y=128, R=116) {
     let p = new CanvasKit.SkPath();
     p.moveTo(X + R, Y);
@@ -315,7 +433,7 @@ Samples
     let c = document.getElementById(id);
     bounds = bounds || {fLeft: 0, fTop: 0, fRight: size.w, fBottom: size.h};
 
-    const surface = CanvasKit.getWebGLSurface(id);
+    const surface = CanvasKit.MakeCanvasSurface(id);
     if (!surface) {
       console.log('Could not make surface');
     }
@@ -337,17 +455,69 @@ Samples
     window.requestAnimationFrame(drawFrame);
     //animation.delete();
   }
+
+  function ShaderExample1(CanvasKit) {
+    if (!CanvasKit) {
+      return;
+    }
+    const surface = CanvasKit.MakeCanvasSurface('shader1');
+    if (!surface) {
+      throw 'Could not make surface';
+    }
+    const skcanvas = surface.getCanvas();
+    const paint = new CanvasKit.SkPaint();
+
+    const prog = `
+uniform float rad_scale;
+uniform float2 in_center;
+uniform float4 in_colors0;
+uniform float4 in_colors1;
+
+void main(float2 p, inout half4 color) {
+    float2 pp = p - in_center;
+    float radius = sqrt(dot(pp, pp));
+    radius = sqrt(radius);
+    float angle = atan(pp.y / pp.x);
+    float t = (angle + 3.1415926/2) / (3.1415926);
+    t += radius * rad_scale;
+    t = fract(t);
+    color = half4(mix(in_colors0, in_colors1, t));
+}
+`;
+
+    // If there are multiple contexts on the screen, we need to make sure
+    // we switch to this one before we draw.
+    const context = CanvasKit.currentContext();
+    const fact = CanvasKit.SkRuntimeEffect.Make(prog);
+    function drawFrame() {
+      CanvasKit.setCurrentContext(context);
+      skcanvas.clear(CanvasKit.WHITE);
+      const shader = fact.makeShader([
+        Math.sin(Date.now() / 2000) / 5,
+        256, 256,
+        1, 0, 0, 1,
+        0, 1, 0, 1],
+        true/*=opaque*/);
+
+      paint.setShader(shader);
+      skcanvas.drawRect(CanvasKit.LTRBRect(0, 0, 512, 512), paint);
+      surface.flush();
+      requestAnimationFrame(drawFrame);
+      shader.delete();
+    }
+    requestAnimationFrame(drawFrame);
+  }
+
   }
   document.head.appendChild(s);
 })();
 </script>
 
 Lottie files courtesy of the lottiefiles.com community:
-[Lego Loader](https://www.lottiefiles.com/410-lego-loader), [I'm
-thirsty](https://www.lottiefiles.com/77-im-thirsty),
+[Lego Loader](https://www.lottiefiles.com/410-lego-loader),
+[I'm thirsty](https://www.lottiefiles.com/77-im-thirsty),
 [Confetti](https://www.lottiefiles.com/1370-confetti),
 [Onboarding](https://www.lottiefiles.com/1134-onboarding-1)
-
 
 Test server
 -----------
@@ -355,4 +525,4 @@ Test your code on our [CanvasKit Fiddle](https://jsfiddle.skia.org/canvaskit)
 
 Download
 --------
-Work is underway on an npm download. Check back soon.
+Get [CanvasKit on NPM](https://www.npmjs.com/package/canvaskit-wasm)

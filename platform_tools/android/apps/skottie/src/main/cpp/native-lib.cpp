@@ -6,30 +6,30 @@
  * found in the LICENSE file.
  */
 
+#include "include/core/SkBitmap.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkColor.h"
+#include "include/core/SkSurface.h"
+#include "include/core/SkTime.h"
 #include <jni.h>
 #include <math.h>
 #include <string>
 #include <utility>
-#include <SkColor.h>
-#include <SkCanvas.h>
-#include <SkBitmap.h>
-#include <SkSurface.h>
-#include <SkTime.h>
 
-#include <GrContextOptions.h>
-#include <GrContext.h>
-#include <gl/GrGLInterface.h>
-#include <GrBackendSurface.h>
-#include <gl/GrGLTypes.h>
+#include "include/gpu/GrBackendSurface.h"
+#include "include/gpu/GrContext.h"
+#include "include/gpu/GrContextOptions.h"
+#include "include/gpu/gl/GrGLInterface.h"
+#include "include/gpu/gl/GrGLTypes.h"
 
-#include <Skottie.h>
+#include "modules/skottie/include/Skottie.h"
 
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 
 #include <GLES3/gl3.h>
 #include <android/trace.h>
-#include "JavaInputStreamAdaptor.h"
+#include "platform_tools/android/apps/skottie/src/main/cpp/JavaInputStreamAdaptor.h"
 
 #define STENCIL_BUFFER_SIZE 8
 
@@ -62,14 +62,13 @@ struct SkottieRunner {
 extern "C" JNIEXPORT jlong
 JNICALL
 Java_org_skia_skottie_SkottieRunner_nCreateProxy(JNIEnv *env, jclass clazz) {
-    sk_sp<const GrGLInterface> glInterface(GrGLCreateNativeInterface());
+    sk_sp<const GrGLInterface> glInterface = GrGLMakeNativeInterface();
     if (!glInterface.get()) {
         return 0;
     }
 
     GrContextOptions options;
     options.fDisableDistanceFieldPaths = true;
-    options.fDisableCoverageCountingPaths = true;
     sk_sp<GrContext> grContext = GrContext::MakeGL(std::move(glInterface), options);
     if (!grContext.get()) {
         return 0;
@@ -105,7 +104,7 @@ struct SkottieAnimation {
 
 extern "C" JNIEXPORT jlong
 JNICALL
-Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nCreateProxy(JNIEnv *env, jobject clazz,
+Java_org_skia_skottie_SkottieRunner_00024SkottieAnimationImpl_nCreateProxy(JNIEnv *env, jobject clazz,
                                                                        jlong runner, jobject is,
                                                                        jbyteArray storage) {
 
@@ -138,7 +137,7 @@ Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nCreateProxy(JNIEnv *e
 
 extern "C" JNIEXPORT void
 JNICALL
-Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nDeleteProxy(JNIEnv *env, jclass clazz,
+Java_org_skia_skottie_SkottieRunner_00024SkottieAnimationImpl_nDeleteProxy(JNIEnv *env, jclass clazz,
                                                                        jlong nativeProxy) {
     if (!nativeProxy) {
         return;
@@ -149,11 +148,11 @@ Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nDeleteProxy(JNIEnv *e
 
 extern "C" JNIEXPORT void
 JNICALL
-Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nDrawFrame(JNIEnv *env, jclass clazz,
+Java_org_skia_skottie_SkottieRunner_00024SkottieAnimationImpl_nDrawFrame(JNIEnv *env, jclass clazz,
                                                                      jlong nativeProxy, jint width,
                                                                      jint height,
                                                                      jboolean wideColorGamut,
-                                                                     jlong frameTimeNanos) {
+                                                                     jfloat progress) {
     ATRACE_NAME("SkottieDrawFrame");
     if (!nativeProxy) {
         return;
@@ -188,18 +187,7 @@ Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nDrawFrame(JNIEnv *env
     auto canvas = renderTarget->getCanvas();
     canvas->clear(SK_ColorTRANSPARENT);
     if (skottieAnimation->mAnimation) {
-        SkMSec t = 0;
-        if (skottieAnimation->mTimeBase == 0.0f) {
-            // Reset the animation time.
-            skottieAnimation->mTimeBase = frameTimeNanos;
-        } else {
-            //convert from nanoseconds to milliseconds
-            t = (frameTimeNanos - skottieAnimation->mTimeBase) / 1000000;
-        }
-        //TODO: control repeat count
-        float intpart;
-        float animState = modff(t / skottieAnimation->mDuration, &intpart);
-        skottieAnimation->mAnimation->seek(animState);
+        skottieAnimation->mAnimation->seek(progress);
 
         SkAutoCanvasRestore acr(canvas, true);
         SkRect bounds = SkRect::MakeWH(width, height);
@@ -207,4 +195,16 @@ Java_org_skia_skottie_SkottieRunner_00024SkottieAnimation_nDrawFrame(JNIEnv *env
     }
 
     canvas->flush();
+}
+
+extern "C" JNIEXPORT jlong
+JNICALL
+Java_org_skia_skottie_SkottieRunner_00024SkottieAnimationImpl_nGetDuration(JNIEnv *env,
+                                                                           jclass clazz,
+                                                                           jlong nativeProxy) {
+    if (!nativeProxy) {
+        return 0;
+    }
+    SkottieAnimation* skottieAnimation = reinterpret_cast<SkottieAnimation*>(nativeProxy);
+    return (jlong) skottieAnimation->mDuration;
 }

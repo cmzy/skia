@@ -5,20 +5,14 @@
  * found in the LICENSE file.
  */
 
-#include "SkPDFMetadata.h"
+#include "src/pdf/SkPDFMetadata.h"
 
-#include "SkMD5.h"
-#include "SkMilestone.h"
-#include "SkPDFTypes.h"
-#include "SkTo.h"
-#include "SkUtils.h"
+#include "include/private/SkTo.h"
+#include "src/core/SkMD5.h"
+#include "src/core/SkUtils.h"
+#include "src/pdf/SkPDFTypes.h"
 
 #include <utility>
-
-#define SKPDF_STRING(X) SKPDF_STRING_IMPL(X)
-#define SKPDF_STRING_IMPL(X) #X
-#define SKPDF_PRODUCER "Skia/PDF m" SKPDF_STRING(SK_MILESTONE)
-#define SKPDF_CUSTOM_PRODUCER_KEY "ProductionLibrary"
 
 static constexpr SkTime::DateTime kZeroTime = {0, 0, 0, 0, 0, 0, 0, 0};
 
@@ -108,10 +102,6 @@ static SkString to_utf16be(const char* src, size_t len) {
 static SkString convert(const SkString& s) {
     return utf8_is_pdfdocencoding(s.c_str(), s.size()) ? s : to_utf16be(s.c_str(), s.size());
 }
-static SkString convert(const char* src) {
-    size_t len = strlen(src);
-    return utf8_is_pdfdocencoding(src, len) ? SkString(src, len) : to_utf16be(src, len);
-}
 
 namespace {
 static const struct {
@@ -123,23 +113,18 @@ static const struct {
         {"Subject", &SkPDF::Metadata::fSubject},
         {"Keywords", &SkPDF::Metadata::fKeywords},
         {"Creator", &SkPDF::Metadata::fCreator},
+        {"Producer", &SkPDF::Metadata::fProducer},
 };
 }  // namespace
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakeDocumentInformationDict(
+std::unique_ptr<SkPDFObject> SkPDFMetadata::MakeDocumentInformationDict(
         const SkPDF::Metadata& metadata) {
-    auto dict = sk_make_sp<SkPDFDict>();
+    auto dict = SkPDFMakeDict();
     for (const auto keyValuePtr : gMetadataKeys) {
         const SkString& value = metadata.*(keyValuePtr.valuePtr);
         if (value.size() > 0) {
             dict->insertString(keyValuePtr.key, convert(value));
         }
-    }
-    if (metadata.fProducer.isEmpty()) {
-        dict->insertString("Producer", convert(SKPDF_PRODUCER));
-    } else {
-        dict->insertString("Producer", convert(metadata.fProducer));
-        dict->insertString(SKPDF_CUSTOM_PRODUCER_KEY, convert(SKPDF_PRODUCER));
     }
     if (metadata.fCreation != kZeroTime) {
         dict->insertString("CreationDate", pdf_date(metadata.fCreation));
@@ -150,8 +135,7 @@ sk_sp<SkPDFObject> SkPDFMetadata::MakeDocumentInformationDict(
     return std::move(dict);
 }
 
-SkPDFMetadata::UUID SkPDFMetadata::CreateUUID(
-        const SkPDF::Metadata& metadata) {
+SkUUID SkPDFMetadata::CreateUUID(const SkPDF::Metadata& metadata) {
     // The main requirement is for the UUID to be unique; the exact
     // format of the data that will be hashed is not important.
     SkMD5 md5;
@@ -172,27 +156,26 @@ SkPDFMetadata::UUID SkPDFMetadata::CreateUUID(
         md5.write(value.c_str(), value.size());
         md5.write("\036", 1);
     }
-    SkMD5::Digest digest;
-    md5.finish(digest);
+    SkMD5::Digest digest = md5.finish();
     // See RFC 4122, page 6-7.
     digest.data[6] = (digest.data[6] & 0x0F) | 0x30;
     digest.data[8] = (digest.data[6] & 0x3F) | 0x80;
-    static_assert(sizeof(digest) == sizeof(UUID), "uuid_size");
-    SkPDFMetadata::UUID uuid;
-    memcpy(&uuid, &digest, sizeof(digest));
+    static_assert(sizeof(digest) == sizeof(SkUUID), "uuid_size");
+    SkUUID uuid;
+    memcpy((void*)&uuid, &digest, sizeof(digest));
     return uuid;
 }
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakePdfId(const UUID& doc,
-                                            const UUID& instance) {
+std::unique_ptr<SkPDFObject> SkPDFMetadata::MakePdfId(const SkUUID& doc,
+                                            const SkUUID& instance) {
     // /ID [ <81b14aafa313db63dbd6f981e49f94f4>
     //       <81b14aafa313db63dbd6f981e49f94f4> ]
-    auto array = sk_make_sp<SkPDFArray>();
-    static_assert(sizeof(SkPDFMetadata::UUID) == 16, "uuid_size");
+    auto array = SkPDFMakeArray();
+    static_assert(sizeof(SkUUID) == 16, "uuid_size");
     array->appendString(
-            SkString(reinterpret_cast<const char*>(&doc), sizeof(UUID)));
+            SkString(reinterpret_cast<const char*>(&doc), sizeof(SkUUID)));
     array->appendString(
-            SkString(reinterpret_cast<const char*>(&instance), sizeof(UUID)));
+            SkString(reinterpret_cast<const char*>(&instance), sizeof(SkUUID)));
     return std::move(array);
 }
 
@@ -208,7 +191,7 @@ static void hexify(const uint8_t** inputPtr, char** outputPtr, int count) {
     }
 }
 
-static SkString uuid_to_string(const SkPDFMetadata::UUID& uuid) {
+static SkString uuid_to_string(const SkUUID& uuid) {
     //  8-4-4-4-12
     char buffer[36];  // [32 + 4]
     char* ptr = buffer;
@@ -231,12 +214,11 @@ namespace {
 class PDFXMLObject final : public SkPDFObject {
 public:
     PDFXMLObject(SkString xml) : fXML(std::move(xml)) {}
-    void emitObject(SkWStream* stream,
-                    const SkPDFObjNumMap& omap) const override {
+    void emitObject(SkWStream* stream) const override {
         SkPDFDict dict("Metadata");
         dict.insertName("Subtype", "XML");
         dict.insertInt("Length", fXML.size());
-        dict.emitObject(stream, omap);
+        dict.emitObject(stream);
         static const char streamBegin[] = " stream\n";
         stream->writeText(streamBegin);
         // Do not compress this.  The standard requires that a
@@ -286,10 +268,10 @@ const SkString escape_xml(const SkString& input,
     static const char kLt[] = "&lt;";
     for (size_t i = 0; i < input.size(); ++i) {
         if (input[i] == '&') {
-            strncpy(out, kAmp, strlen(kAmp));
+            memcpy(out, kAmp, strlen(kAmp));
             out += strlen(kAmp);
         } else if (input[i] == '<') {
-            strncpy(out, kLt, strlen(kLt));
+            memcpy(out, kLt, strlen(kLt));
             out += strlen(kLt);
         } else {
             *out++ = input[i];
@@ -305,10 +287,11 @@ const SkString escape_xml(const SkString& input,
     return output;
 }
 
-sk_sp<SkPDFObject> SkPDFMetadata::MakeXMPObject(
+SkPDFIndirectReference SkPDFMetadata::MakeXMPObject(
         const SkPDF::Metadata& metadata,
-        const UUID& doc,
-        const UUID& instance) {
+        const SkUUID& doc,
+        const SkUUID& instance,
+        SkPDFDocument* docPtr) {
     static const char templateString[] =
             "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n"
             "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"\n"
@@ -377,15 +360,7 @@ sk_sp<SkPDFObject> SkPDFMetadata::MakeXMPObject(
                                     "</pdf:Keywords>\n");
     // TODO: in theory, keywords can be a list too.
 
-    SkString producer("<pdf:Producer>" SKPDF_PRODUCER "</pdf:Producer>\n");
-    if (!metadata.fProducer.isEmpty()) {
-        // TODO: register a developer prefix to make
-        // <skia:SKPDF_CUSTOM_PRODUCER_KEY> a real XML tag.
-        producer = escape_xml(
-                metadata.fProducer, "<pdf:Producer>",
-                "</pdf:Producer>\n<!-- <skia:" SKPDF_CUSTOM_PRODUCER_KEY ">"
-                SKPDF_PRODUCER "</skia:" SKPDF_CUSTOM_PRODUCER_KEY "> -->\n");
-    }
+    SkString producer = escape_xml(metadata.fProducer, "<pdf:Producer>", "</pdf:Producer>\n");
 
     SkString creator = escape_xml(metadata.fCreator, "<xmp:CreatorTool>",
                                   "</xmp:CreatorTool>\n");
@@ -393,11 +368,19 @@ sk_sp<SkPDFObject> SkPDFMetadata::MakeXMPObject(
     SkASSERT(0 == count_xml_escape_size(documentID));
     SkString instanceID = uuid_to_string(instance);
     SkASSERT(0 == count_xml_escape_size(instanceID));
-    return sk_make_sp<PDFXMLObject>(SkStringPrintf(
+
+
+    auto value = SkStringPrintf(
             templateString, modificationDate.c_str(), creationDate.c_str(),
             creator.c_str(), title.c_str(), subject.c_str(), author.c_str(),
             keywords1.c_str(), documentID.c_str(), instanceID.c_str(),
-            producer.c_str(), keywords2.c_str()));
+            producer.c_str(), keywords2.c_str());
+
+    std::unique_ptr<SkPDFDict> dict = SkPDFMakeDict("Metadata");
+    dict->insertName("Subtype", "XML");
+    return SkPDFStreamOut(std::move(dict),
+                          SkMemoryStream::MakeCopy(value.c_str(), value.size()),
+                          docPtr, false);
 }
 
 #undef SKPDF_CUSTOM_PRODUCER_KEY

@@ -1,23 +1,6 @@
-
-
 describe('PathKit\'s Path2D API', function() {
-    // Note, don't try to print the PathKit object - it can cause Karma/Jasmine to lock up.
-    var PathKit = null;
-    const LoadPathKit = new Promise(function(resolve, reject) {
-        if (PathKit) {
-            resolve();
-        } else {
-            PathKitInit({
-                locateFile: (file) => '/pathkit/'+file,
-            }).then((_PathKit) => {
-                PathKit = _PathKit;
-                resolve();
-            });
-        }
-    });
-
     it('can do everything in the Path2D API w/o crashing', function(done) {
-        LoadPathKit.then(() => {
+        LoadPathKit.then(catchException(done, () => {
             // This is taken from example.html
             let path = PathKit.NewPath();
 
@@ -85,11 +68,11 @@ describe('PathKit\'s Path2D API', function() {
                     done();
                 }).catch(reportError(done));
             }).catch(reportError(done));
-        });
+        }));
     });
 
     it('can chain by returning the same object', function(done) {
-        LoadPathKit.then(() => {
+        LoadPathKit.then(catchException(done, () => {
             let path = PathKit.NewPath();
 
             let p1 = path.moveTo(20, 5)
@@ -109,11 +92,11 @@ describe('PathKit\'s Path2D API', function() {
                 // all is well
             }
             done();
-        });
+        }));
     });
 
     it('does not leak path objects when chaining', function(done) {
-        LoadPathKit.then(() => {
+        LoadPathKit.then(catchException(done, () => {
             // By default, we have 16 MB of memory assigned to our PathKit
             // library. This can be configured by -S TOTAL_MEMORY=NN
             // and defaults to 16MB (we likely don't need to touch this).
@@ -129,7 +112,7 @@ describe('PathKit\'s Path2D API', function() {
                 path.delete();
             }
             done();
-        });
+        }));
     });
 
     function drawTriangle() {
@@ -142,7 +125,7 @@ describe('PathKit\'s Path2D API', function() {
     }
 
     it('has multiple overloads of addPath', function(done) {
-        LoadPathKit.then(() => {
+        LoadPathKit.then(catchException(done, () => {
             let basePath = PathKit.NewPath();
             let otherPath = drawTriangle();
             // These add path call can be chained.
@@ -159,11 +142,11 @@ describe('PathKit\'s Path2D API', function() {
             reportPath(basePath, 'add_path_3x', done);
             basePath.delete();
             otherPath.delete();
-        });
+        }));
     });
 
     it('approximates arcs (conics) with quads', function(done) {
-        LoadPathKit.then(() => {
+        LoadPathKit.then(catchException(done, () => {
             let path = PathKit.NewPath();
             path.moveTo(50, 120);
             path.arc(50, 120, 45, 0, 1.75 * Math.PI);
@@ -187,7 +170,7 @@ describe('PathKit\'s Path2D API', function() {
             reportCanvas(canvas, 'conics_quads_approx').then(() => {
                 done();
             }).catch(reportError(done));
-        });
+        }));
     });
 
 });

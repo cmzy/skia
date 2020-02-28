@@ -8,9 +8,9 @@
 #ifndef Sk1DPathEffect_DEFINED
 #define Sk1DPathEffect_DEFINED
 
-#include "SkFlattenable.h"
-#include "SkPathEffect.h"
-#include "SkPath.h"
+#include "include/core/SkFlattenable.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathEffect.h"
 
 class SkPathMeasure;
 
@@ -30,10 +30,6 @@ protected:
         contour is done.
     */
     virtual SkScalar next(SkPath* dst, SkScalar dist, SkPathMeasure&) const = 0;
-
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
-    bool exposedInAndroidJavaAPI() const override { return true; }
-#endif
 
 private:
     typedef SkPathEffect INHERITED;

@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-in half4x4 gradientMatrix;
+in half3x3 gradientMatrix;
 
 layout(tracked) in uniform half bias;
 layout(tracked) in uniform half scale;
@@ -22,10 +22,10 @@ void main() {
     // using atan instead.
     half angle;
     if (sk_Caps.atan2ImplementedAsAtanYOverX) {
-        angle = 2 * atan(-sk_TransformedCoords2D[0].y,
-                         length(sk_TransformedCoords2D[0]) - sk_TransformedCoords2D[0].x);
+        angle = half(2 * atan(-sk_TransformedCoords2D[0].y,
+                              length(sk_TransformedCoords2D[0]) - sk_TransformedCoords2D[0].x));
     } else {
-        angle = atan(-sk_TransformedCoords2D[0].y, -sk_TransformedCoords2D[0].x);
+        angle = half(atan(-sk_TransformedCoords2D[0].y, -sk_TransformedCoords2D[0].x));
     }
 
     // 0.1591549430918 is 1/(2*pi), used since atan returns values [-pi, pi]
@@ -36,8 +36,8 @@ void main() {
 //////////////////////////////////////////////////////////////////////////////
 
 @header {
-    #include "SkSweepGradient.h"
-    #include "GrGradientShader.h"
+    #include "src/gpu/gradients/GrGradientShader.h"
+    #include "src/shaders/gradients/SkSweepGradient.h"
 }
 
 // The sweep gradient never rejects a pixel so it doesn't change opacity
@@ -78,6 +78,6 @@ void main() {
                                     params.fStops, params.fColorCount);
     GrTest::TestAsFPArgs asFPArgs(d);
     std::unique_ptr<GrFragmentProcessor> fp = as_SB(shader)->asFragmentProcessor(asFPArgs.args());
-    GrAlwaysAssert(fp);
+    SkASSERT_RELEASE(fp);
     return fp;
 }

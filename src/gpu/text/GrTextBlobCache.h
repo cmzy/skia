@@ -8,12 +8,12 @@
 #ifndef GrTextBlobCache_DEFINED
 #define GrTextBlobCache_DEFINED
 
-#include "GrTextContext.h"
-#include "SkMessageBus.h"
-#include "SkRefCnt.h"
-#include "SkTArray.h"
-#include "SkTextBlobPriv.h"
-#include "SkTHash.h"
+#include "include/core/SkRefCnt.h"
+#include "include/private/SkTArray.h"
+#include "include/private/SkTHash.h"
+#include "src/core/SkMessageBus.h"
+#include "src/core/SkTextBlobPriv.h"
+#include "src/gpu/text/GrTextBlob.h"
 
 class GrTextBlobCache {
 public:
@@ -33,39 +33,29 @@ public:
     }
     ~GrTextBlobCache();
 
-    // creates an uncached blob
-    sk_sp<GrTextBlob> makeBlob(int glyphCount, int runCount) {
-        return GrTextBlob::Make(glyphCount, runCount);
-    }
-
-    sk_sp<GrTextBlob> makeBlob(const SkTextBlob* blob) {
-        int glyphCount = 0;
-        int runCount = 0;
-        BlobGlyphCount(&glyphCount, &runCount, blob);
-        return GrTextBlob::Make(glyphCount, runCount);
-    }
-
-    sk_sp<GrTextBlob> makeCachedBlob(const SkTextBlob* blob,
-                                          const GrTextBlob::Key& key,
-                                          const SkMaskFilterBase::BlurRec& blurRec,
-                                          const SkPaint& paint) {
-        sk_sp<GrTextBlob> cacheBlob(this->makeBlob(blob));
-        cacheBlob->setupKey(key, blurRec, paint);
-        this->add(cacheBlob);
-        blob->notifyAddedToCache(fUniqueID);
-        return cacheBlob;
-    }
-
-    sk_sp<GrTextBlob> makeBlob(const SkGlyphRunList& glyphRunList) {
-        return GrTextBlob::Make(glyphRunList.totalGlyphCount(), glyphRunList.size());
+    sk_sp<GrTextBlob> makeBlob(const SkGlyphRunList& glyphRunList,
+                               GrStrikeCache* strikeCache,
+                               const SkMatrix& viewMatrix,
+                               GrColor color,
+                               bool forceW) {
+        return GrTextBlob::Make(
+                glyphRunList,
+                strikeCache,
+                viewMatrix,
+                color,
+                forceW);
     }
 
     sk_sp<GrTextBlob> makeCachedBlob(const SkGlyphRunList& glyphRunList,
+                                     GrStrikeCache* strikeCache,
                                      const GrTextBlob::Key& key,
                                      const SkMaskFilterBase::BlurRec& blurRec,
-                                     const SkPaint& paint) {
-        sk_sp<GrTextBlob> cacheBlob(makeBlob(glyphRunList));
-        cacheBlob->setupKey(key, blurRec, paint);
+                                     const SkMatrix& viewMatrix,
+                                     GrColor color,
+                                     bool forceW) {
+        sk_sp<GrTextBlob> cacheBlob(
+                this->makeBlob(glyphRunList, strikeCache, viewMatrix, color, forceW));
+        cacheBlob->setupKey(key, blurRec, glyphRunList.paint());
         this->add(cacheBlob);
         glyphRunList.temporaryShuntBlobNotifyAddedToCache(fUniqueID);
         return cacheBlob;
@@ -125,6 +115,8 @@ public:
 
     void purgeStaleBlobs();
 
+    size_t usedBytes() const { return fCurrentSize; }
+
 private:
     using BitmapBlobList = SkTInternalLList<GrTextBlob>;
 
@@ -168,10 +160,10 @@ private:
             return -1;
         }
 
-        uint32_t                             fID;
+        uint32_t                        fID;
         // Current clients don't generate multiple GrAtlasTextBlobs per SkTextBlob, so an array w/
         // linear search is acceptable.  If usage changes, we should re-evaluate this structure.
-        SkSTArray<1, sk_sp<GrTextBlob>, true> fBlobs;
+        SkSTArray<1, sk_sp<GrTextBlob>> fBlobs;
     };
 
     void add(sk_sp<GrTextBlob> blob) {

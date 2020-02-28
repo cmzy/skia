@@ -5,25 +5,29 @@
  * found in the LICENSE file.
  */
 
-#include "SkBitmap.h"
-#include "SkCodecPriv.h"
-#include "SkColorData.h"
-#include "SkColorSpace.h"
-#include "SkColorTable.h"
-#include "SkMacros.h"
-#include "SkMath.h"
-#include "SkOpts.h"
-#include "SkPngCodec.h"
-#include "SkPngPriv.h"
-#include "SkPoint3.h"
-#include "SkSize.h"
-#include "SkStream.h"
-#include "SkSwizzler.h"
-#include "SkTemplates.h"
-#include "SkUtils.h"
+#include "include/core/SkBitmap.h"
+#include "include/core/SkColorSpace.h"
+#include "include/core/SkMath.h"
+#include "include/core/SkPoint3.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkStream.h"
+#include "include/private/SkColorData.h"
+#include "include/private/SkMacros.h"
+#include "include/private/SkTemplates.h"
+#include "src/codec/SkCodecPriv.h"
+#include "src/codec/SkColorTable.h"
+#include "src/codec/SkPngCodec.h"
+#include "src/codec/SkPngPriv.h"
+#include "src/codec/SkSwizzler.h"
+#include "src/core/SkOpts.h"
+#include "src/core/SkUtils.h"
 
 #include "png.h"
 #include <algorithm>
+
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    #include "include/android/SkAndroidFrameworkUtils.h"
+#endif
 
 // This warning triggers false postives way too often in here.
 #if defined(__GNUC__) && !defined(__clang__)
@@ -195,7 +199,7 @@ bool SkPngCodec::processData() {
         case kPngError:
             // There was an error. Stop processing data.
             // FIXME: Do we need to discard png_ptr?
-            return false;;
+            return false;
         case kStopDecoding:
             // We decoded all the lines we want.
             return true;
@@ -478,6 +482,14 @@ void SkPngCodec::applyXformRow(void* dst, const void* src) {
     }
 }
 
+static SkCodec::Result log_and_return_error(bool success) {
+    if (success) return SkCodec::kIncompleteInput;
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+    SkAndroidFrameworkUtils::SafetyNetLog("117838472");
+#endif
+    return SkCodec::kErrorInInput;
+}
+
 class SkPngNormalDecoder : public SkPngCodec {
 public:
     SkPngNormalDecoder(SkEncodedInfo&& info, std::unique_ptr<SkStream> stream,
@@ -533,7 +545,7 @@ private:
             *rowsDecoded = fRowsWrittenToOutput;
         }
 
-        return success ? kIncompleteInput : kErrorInInput;
+        return log_and_return_error(success);
     }
 
     void allRowsCallback(png_bytep row, int rowNum) {
@@ -568,7 +580,7 @@ private:
             *rowsDecoded = fRowsWrittenToOutput;
         }
 
-        return success ? kIncompleteInput : kErrorInInput;
+        return log_and_return_error(success);
     }
 
     void rowCallback(png_bytep row, int rowNum) {
@@ -686,7 +698,7 @@ private:
             *rowsDecoded = fLinesDecoded;
         }
 
-        return success ? kIncompleteInput : kErrorInInput;
+        return log_and_return_error(success);
     }
 
     void setRange(int firstRow, int lastRow, void* dst, size_t rowBytes) override {
@@ -708,7 +720,7 @@ private:
             if (rowsDecoded) {
                 *rowsDecoded = 0;
             }
-            return success ? kIncompleteInput : kErrorInInput;
+            return log_and_return_error(success);
         }
 
         const int sampleY = this->swizzler() ? this->swizzler()->sampleY() : 1;
@@ -738,7 +750,7 @@ private:
         if (rowsDecoded) {
             *rowsDecoded = rowsWrittenToOutput;
         }
-        return success ? kIncompleteInput : kErrorInInput;
+        return log_and_return_error(success);
     }
 
     void setUpInterlaceBuffer(int height) {
@@ -1066,9 +1078,31 @@ void SkPngCodec::initializeSwizzler(const SkImageInfo& dstInfo, const Options& o
         swizzlerOptions.fZeroInitialized = kNo_ZeroInitialized;
     }
 
-    const SkPMColor* colors = get_color_ptr(fColorTable.get());
-    fSwizzler.reset(SkSwizzler::CreateSwizzler(this->getEncodedInfo(), colors, swizzlerInfo,
-                                               swizzlerOptions, nullptr, skipFormatConversion));
+    if (skipFormatConversion) {
+        // We cannot skip format conversion when there is a color table.
+        SkASSERT(!fColorTable);
+        int srcBPP = 0;
+        switch (this->getEncodedInfo().color()) {
+            case SkEncodedInfo::kRGB_Color:
+                SkASSERT(this->getEncodedInfo().bitsPerComponent() == 16);
+                srcBPP = 6;
+                break;
+            case SkEncodedInfo::kRGBA_Color:
+                srcBPP = this->getEncodedInfo().bitsPerComponent() / 2;
+                break;
+            case SkEncodedInfo::kGray_Color:
+                srcBPP = 1;
+                break;
+            default:
+                SkASSERT(false);
+                break;
+        }
+        fSwizzler = SkSwizzler::MakeSimple(srcBPP, swizzlerInfo, swizzlerOptions);
+    } else {
+        const SkPMColor* colors = get_color_ptr(fColorTable.get());
+        fSwizzler = SkSwizzler::Make(this->getEncodedInfo(), colors, swizzlerInfo,
+                                     swizzlerOptions);
+    }
     SkASSERT(fSwizzler);
 }
 

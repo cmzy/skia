@@ -5,19 +5,20 @@
  * found in the LICENSE file.
  */
 
-#include "Sample.h"
-#include "SkAnimTimer.h"
-#include "SkColor.h"
-#include "SkRandom.h"
-#include "SkRRect.h"
+#include "include/core/SkCanvas.h"
+#include "include/core/SkRRect.h"
+#include "include/utils/SkRandom.h"
+#include "samplecode/Sample.h"
+#include "tools/timer/TimeUtils.h"
 
-#include "SkSGColor.h"
-#include "SkSGDraw.h"
-#include "SkSGGroup.h"
-#include "SkSGPath.h"
-#include "SkSGRect.h"
-#include "SkSGScene.h"
-#include "SkSGTransform.h"
+#include "modules/sksg/include/SkSGDraw.h"
+#include "modules/sksg/include/SkSGGroup.h"
+#include "modules/sksg/include/SkSGInvalidationController.h"
+#include "modules/sksg/include/SkSGPaint.h"
+#include "modules/sksg/include/SkSGPath.h"
+#include "modules/sksg/include/SkSGRect.h"
+#include "modules/sksg/include/SkSGScene.h"
+#include "modules/sksg/include/SkSGTransform.h"
 
 namespace {
 
@@ -140,25 +141,20 @@ protected:
         group->addChild(sksg::Draw::Make(fBall.objectNode, ball_paint));
 
         // Handle everything in a normalized 1x1 space.
-        fContentMatrix = sksg::Matrix::Make(
+        fContentMatrix = sksg::Matrix<SkMatrix>::Make(
             SkMatrix::MakeRectToRect(SkRect::MakeWH(1, 1),
                                      SkRect::MakeIWH(this->width(), this->height()),
                                      SkMatrix::kFill_ScaleToFit));
-        auto root = sksg::Transform::Make(std::move(group), fContentMatrix);
+        auto root = sksg::TransformEffect::Make(std::move(group), fContentMatrix);
         fScene = sksg::Scene::Make(std::move(root), sksg::AnimatorList());
 
         // Off we go.
         this->updatePaddleStrategy();
     }
 
-    bool onQuery(Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "SGPong");
-            return true;
-        }
+    SkString name() override { return SkString("SGPong"); }
 
-        SkUnichar uni;
-        if (Sample::CharQ(*evt, &uni)) {
+    bool onChar(SkUnichar uni) override {
             switch (uni) {
                 case '[':
                     fTimeScale = SkTPin(fTimeScale - 0.1f, kTimeScaleMin, kTimeScaleMax);
@@ -168,13 +164,11 @@ protected:
                     return true;
                 case 'I':
                     fShowInval = !fShowInval;
-                    fScene->setShowInval(fShowInval);
                     return true;
                 default:
                     break;
             }
-        }
-        return this->INHERITED::onQuery(evt);
+            return false;
     }
 
     void onSizeChange() override {
@@ -189,14 +183,30 @@ protected:
     }
 
     void onDrawContent(SkCanvas* canvas) override {
+        sksg::InvalidationController ic;
+        fScene->animate(0, &ic);
         fScene->render(canvas);
+
+        if (fShowInval) {
+            SkPaint fill, stroke;
+            fill.setAntiAlias(true);
+            fill.setColor(0x40ff0000);
+            stroke.setAntiAlias(true);
+            stroke.setColor(0xffff0000);
+            stroke.setStyle(SkPaint::kStroke_Style);
+
+            for (const auto& r : ic) {
+                canvas->drawRect(r, fill);
+                canvas->drawRect(r, stroke);
+            }
+        }
     }
 
-    bool onAnimate(const SkAnimTimer& timer) override {
+    bool onAnimate(double nanos) override {
         // onAnimate may fire before the first draw.
         if (fScene) {
-            SkScalar dt = (timer.msec() - fLastTick) * fTimeScale;
-            fLastTick = timer.msec();
+            SkScalar dt = (TimeUtils::NanosToMSec(nanos) - fLastTick) * fTimeScale;
+            fLastTick = TimeUtils::NanosToMSec(nanos);
 
             fPaddle0.posTick(dt);
             fPaddle1.posTick(dt);
@@ -283,14 +293,14 @@ private:
         catcher->spd.fY = (yIntercept - catcher->pos.fY) / t;
     }
 
-    std::unique_ptr<sksg::Scene> fScene;
-    sk_sp<sksg::Matrix>          fContentMatrix;
-    Object                       fPaddle0, fPaddle1, fBall;
-    SkRandom                     fRand;
+    std::unique_ptr<sksg::Scene>  fScene;
+    sk_sp<sksg::Matrix<SkMatrix>> fContentMatrix;
+    Object                        fPaddle0, fPaddle1, fBall;
+    SkRandom                      fRand;
 
-    SkMSec                       fLastTick  = 0;
-    SkScalar                     fTimeScale = 1.0f;
-    bool                         fShowInval = false;
+    SkMSec                        fLastTick  = 0;
+    SkScalar                      fTimeScale = 1.0f;
+    bool                          fShowInval = false;
 
     typedef Sample INHERITED;
 };

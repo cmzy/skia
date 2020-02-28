@@ -5,9 +5,9 @@
  * found in the LICENSE file.
  */
 
-#include "SkSLCompiler.h"
+#include "src/sksl/SkSLCompiler.h"
 
-#include "Test.h"
+#include "tests/Test.h"
 
 static void test_failure(skiatest::Reporter* r, const char* src, const char* error) {
     SkSL::Compiler compiler;
@@ -37,6 +37,12 @@ static void test_success(skiatest::Reporter* r, const char* src) {
     REPORTER_ASSERT(r, program);
 }
 
+DEF_TEST(SkSLOpenArray, r) {
+    test_failure(r,
+                 "void main(inout float4 color) { color.r[ = ( color.g ); }",
+                 "error: 1: expected expression, but found '='\n1 error\n");
+}
+
 DEF_TEST(SkSLUndefinedSymbol, r) {
     test_failure(r,
                  "void main() { x = float2(1); }",
@@ -52,7 +58,7 @@ DEF_TEST(SkSLUndefinedFunction, r) {
 DEF_TEST(SkSLGenericArgumentMismatch, r) {
     test_failure(r,
                  "void main() { float x = sin(1, 2); }",
-                 "error: 1: call to 'sin' expected 1 argument, but found 2\n1 error\n");
+                 "error: 1: no match for sin(int, int)\n1 error\n");
     test_failure(r,
                  "void main() { float x = sin(true); }",
                  "error: 1: no match for sin(bool)\n1 error\n");
@@ -166,6 +172,12 @@ DEF_TEST(SkSLSwizzleDuplicateOutput, r) {
                  "error: 1: cannot write to the same swizzle field more than once\n1 error\n");
 }
 
+DEF_TEST(SkSLSwizzleConstantOutput, r) {
+    test_failure(r,
+                 "void main() { float4 test = float4(1); test.xyz0 = float4(1); }",
+                 "error: 1: cannot write to a swizzle mask containing a constant\n1 error\n");
+}
+
 DEF_TEST(SkSLAssignmentTypeMismatch, r) {
     test_failure(r,
                  "void main() { int x = 1.0; }",
@@ -258,7 +270,7 @@ DEF_TEST(SkSLBinaryTypeMismatch, r) {
 DEF_TEST(SkSLCallNonFunction, r) {
     test_failure(r,
                  "void main() { float x = 3; x(); }",
-                 "error: 1: 'x' is not a function\n1 error\n");
+                 "error: 1: not a function\n1 error\n");
 }
 
 DEF_TEST(SkSLInvalidUnary, r) {
@@ -290,7 +302,7 @@ DEF_TEST(SkSLInvalidUnary, r) {
 DEF_TEST(SkSLInvalidAssignment, r) {
     test_failure(r,
                  "void main() { 1 = 2; }",
-                 "error: 1: cannot assign to '1'\n1 error\n");
+                 "error: 1: cannot assign to this expression\n1 error\n");
     test_failure(r,
                  "uniform int x; void main() { x = 0; }",
                  "error: 1: cannot modify immutable variable 'x'\n1 error\n");
@@ -341,7 +353,7 @@ DEF_TEST(SkSLUseWithoutInitialize, r) {
                  "error: 1: 'x' has not been assigned\n1 error\n");
     test_failure(r,
                  "void main() { int x; switch (3) { case 0: x = 0; case 1: x = 1; }"
-                               "sk_FragColor = float4(x); }",
+                               "sk_FragColor = half4(x); }",
                  "error: 1: 'x' has not been assigned\n1 error\n");
 }
 
@@ -366,7 +378,7 @@ DEF_TEST(SkSLUnreachable, r) {
 DEF_TEST(SkSLNoReturn, r) {
     test_failure(r,
                  "int foo() { if (2 > 5) return 3; }",
-                 "error: 1: function can exit without returning a value\n1 error\n");
+                 "error: 1: function 'foo' can exit without returning a value\n1 error\n");
 }
 
 DEF_TEST(SkSLBreakOutsideLoop, r) {
@@ -461,10 +473,10 @@ DEF_TEST(SkSLFieldAfterRuntimeArray, r) {
 DEF_TEST(SkSLStaticIf, r) {
     test_success(r,
                  "void main() { float x = 5; float y = 10;"
-                 "@if (x < y) { sk_FragColor = float4(1); } }");
+                 "@if (x < y) { sk_FragColor = half4(1); } }");
     test_failure(r,
                  "void main() { float x = sqrt(25); float y = 10;"
-                 "@if (x < y) { sk_FragColor = float4(1); } }",
+                 "@if (x < y) { sk_FragColor = half4(1); } }",
                  "error: 1: static if has non-static test\n1 error\n");
 }
 
@@ -473,16 +485,16 @@ DEF_TEST(SkSLStaticSwitch, r) {
                  "void main() {"
                  "int x = 1;"
                  "@switch (x) {"
-                 "case 1: sk_FragColor = float4(1); break;"
-                 "default: sk_FragColor = float4(0);"
+                 "case 1: sk_FragColor = half4(1); break;"
+                 "default: sk_FragColor = half4(0);"
                  "}"
                  "}");
     test_failure(r,
                  "void main() {"
                  "int x = int(sqrt(1));"
                  "@switch (x) {"
-                 "case 1: sk_FragColor = float4(1); break;"
-                 "default: sk_FragColor = float4(0);"
+                 "case 1: sk_FragColor = half4(1); break;"
+                 "default: sk_FragColor = half4(0);"
                  "}"
                  "}",
                  "error: 1: static switch has non-static test\n1 error\n");
@@ -490,8 +502,8 @@ DEF_TEST(SkSLStaticSwitch, r) {
                  "void main() {"
                  "int x = 1;"
                  "@switch (x) {"
-                 "case 1: sk_FragColor = float4(1); if (sqrt(0) < sqrt(1)) break;"
-                 "default: sk_FragColor = float4(0);"
+                 "case 1: sk_FragColor = half4(1); if (sqrt(0) < sqrt(1)) break;"
+                 "default: sk_FragColor = half4(0);"
                  "}"
                  "}",
                  "error: 1: static switch contains non-static conditional break\n1 error\n");
@@ -509,4 +521,10 @@ DEF_TEST(SkSLDuplicateOutput, r) {
     test_failure(r,
                  "layout (location=0, index=0) out half4 duplicateOutput;",
                  "error: 1: out location=0, index=0 is reserved for sk_FragColor\n1 error\n");
+}
+
+DEF_TEST(SkSLSpuriousFloat, r) {
+    test_failure(r,
+                 "void main() { float x; x = 1.5 2.5; }",
+                 "error: 1: expected ';', but found '2.5'\n1 error\n");
 }

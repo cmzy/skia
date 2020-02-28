@@ -4,11 +4,11 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "SkAddIntersections.h"
-#include "SkOpCoincidence.h"
-#include "SkOpEdgeBuilder.h"
-#include "SkPathOpsCommon.h"
-#include "SkPathWriter.h"
+#include "src/pathops/SkAddIntersections.h"
+#include "src/pathops/SkOpCoincidence.h"
+#include "src/pathops/SkOpEdgeBuilder.h"
+#include "src/pathops/SkPathOpsCommon.h"
+#include "src/pathops/SkPathWriter.h"
 
 static bool bridgeWinding(SkOpContourHead* contourList, SkPathWriter* writer) {
     bool unsortable = false;
@@ -50,7 +50,9 @@ static bool bridgeWinding(SkOpContourHead* contourList, SkPathWriter* writer) {
                 if (current->activeWinding(start, end) && !writer->isClosed()) {
                     SkOpSpan* spanStart = start->starter(end);
                     if (!spanStart->done()) {
-                        SkAssertResult(current->addCurveTo(start, end, writer));
+                        if (!current->addCurveTo(start, end, writer)) {
+                            return false;
+                        }
                         current->markDone(spanStart);
                     }
                 }
@@ -122,12 +124,12 @@ static bool bridgeXor(SkOpContourHead* contourList, SkPathWriter* writer) {
             start = nextStart;
             end = nextEnd;
         } while (!writer->isClosed() && (!unsortable || !start->starter(end)->done()));
-#ifdef SK_DEBUG
         if (!writer->isClosed()) {
             SkOpSpan* spanStart = start->starter(end);
-            SkASSERT(spanStart->done());
+            if (!spanStart->done()) {
+                return false;
+            }
         }
-#endif
         writer->finishContour();
         SkPathOpsDebug::ShowActiveSpans(contourList);
     } while (true);
@@ -138,8 +140,8 @@ static bool bridgeXor(SkOpContourHead* contourList, SkPathWriter* writer) {
 bool SimplifyDebug(const SkPath& path, SkPath* result
         SkDEBUGPARAMS(bool skipAssert) SkDEBUGPARAMS(const char* testName)) {
     // returns 1 for evenodd, -1 for winding, regardless of inverse-ness
-    SkPath::FillType fillType = path.isInverseFillType() ? SkPath::kInverseEvenOdd_FillType
-            : SkPath::kEvenOdd_FillType;
+    SkPathFillType fillType = path.isInverseFillType() ? SkPathFillType::kInverseEvenOdd
+            : SkPathFillType::kEvenOdd;
     if (path.isConvex()) {
         if (result != &path) {
             *result = path;

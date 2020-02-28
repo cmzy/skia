@@ -8,7 +8,7 @@
 #ifndef GrTextureMaker_DEFINED
 #define GrTextureMaker_DEFINED
 
-#include "GrTextureProducer.h"
+#include "src/gpu/GrTextureProducer.h"
 
 /**
  * Base class for sources that start out as something other than a texture (encoded image,
@@ -16,8 +16,6 @@
  */
 class GrTextureMaker : public GrTextureProducer {
 public:
-    enum class AllowedTexGenType : bool { kCheap, kAny };
-
     std::unique_ptr<GrFragmentProcessor> createFragmentProcessor(
             const SkMatrix& textureMatrix,
             const SkRect& constraintRect,
@@ -26,8 +24,8 @@ public:
             const GrSamplerState::Filter* filterOrNullForBicubic) override;
 
 protected:
-    GrTextureMaker(GrContext* context, int width, int height, bool isAlphaOnly)
-        : INHERITED(context, width, height, isAlphaOnly) {}
+    GrTextureMaker(GrRecordingContext* context, const GrImageInfo& info, bool domainNeedsLocal)
+            : INHERITED(context, info, domainNeedsLocal) {}
 
     /**
      *  Return the maker's "original" texture. It is the responsibility of the maker to handle any
@@ -36,15 +34,10 @@ protected:
      *  construct then refOriginalTextureProxy should return nullptr (for example if texture is made
      *  by drawing into a render target).
      */
-    virtual sk_sp<GrTextureProxy> refOriginalTextureProxy(bool willBeMipped,
-                                                          AllowedTexGenType genType) = 0;
-
-    GrContext* context() const { return fContext; }
+    virtual GrSurfaceProxyView refOriginalTextureProxyView(bool willBeMipped) = 0;
 
 private:
-    sk_sp<GrTextureProxy> onRefTextureProxyForParams(const GrSamplerState&,
-                                                     bool willBeMipped,
-                                                     SkScalar scaleAdjust[2]) override;
+    GrSurfaceProxyView onRefTextureProxyViewForParams(GrSamplerState, bool willBeMipped) override;
 
     typedef GrTextureProducer INHERITED;
 };

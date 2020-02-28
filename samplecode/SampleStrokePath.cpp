@@ -4,13 +4,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
-#include "Sample.h"
-#include "SkBlurMask.h"
-#include "SkCanvas.h"
-#include "SkMaskFilter.h"
-#include "SkParsePath.h"
-#include "SkPath.h"
-#include "SkRandom.h"
+
+#include "samplecode/Sample.h"
+
+#include "include/core/SkCanvas.h"
+#include "include/core/SkFont.h"
+#include "include/core/SkMaskFilter.h"
+#include "include/core/SkPath.h"
+#include "include/utils/SkParsePath.h"
+#include "include/utils/SkRandom.h"
+#include "src/core/SkBlurMask.h"
 
 
 static void test_huge_stroke(SkCanvas* canvas) {
@@ -109,8 +112,8 @@ protected:
             "Z";
         SkParsePath::FromSVGString(str, &fPath);
 #else
-        fPath.addCircle(0, 0, SkIntToScalar(50), SkPath::kCW_Direction);
-        fPath.addCircle(0, SkIntToScalar(-50), SkIntToScalar(30), SkPath::kCW_Direction);
+        fPath.addCircle(0, 0, SkIntToScalar(50), SkPathDirection::kCW);
+        fPath.addCircle(0, SkIntToScalar(-50), SkIntToScalar(30), SkPathDirection::kCW);
 #endif
 
         scale_to_width(&fPath, fWidth);
@@ -120,13 +123,7 @@ protected:
         this->setBGColor(0xFFDDDDDD);
     }
 
-    bool onQuery(Sample::Event* evt) override {
-        if (Sample::TitleQ(*evt)) {
-            Sample::TitleR(evt, "StrokePath");
-            return true;
-        }
-        return this->INHERITED::onQuery(evt);
-    }
+    SkString name() override { return SkString("StrokePath"); }
 
     SkRandom rand;
 
@@ -152,7 +149,7 @@ protected:
         if (true) {
             canvas->drawColor(SK_ColorBLACK);
 
-            paint.setTextSize(24);
+            SkFont font(nullptr, 24);
             paint.setColor(SK_ColorWHITE);
             canvas->translate(10, 30);
 
@@ -168,7 +165,7 @@ protected:
                     if (x) {
                         paint.setMaskFilter(SkMaskFilter::MakeBlur(gStyle[x - 1], sigma));
                     }
-                    canvas->drawString("Title Bar", x*SkIntToScalar(100), y*SkIntToScalar(30), paint);
+                    canvas->drawString("Title Bar", x * 100.0f, y * 30.0f, font, paint);
                     sigma *= 0.75f;
                 }
 
@@ -195,11 +192,11 @@ protected:
         fPath.offset(100, 0);
 #endif
 
-        fPath.setFillType(SkPath::kWinding_FillType);
+        fPath.setFillType(SkPathFillType::kWinding);
         drawSet(canvas, &paint);
 
         canvas->translate(0, fPath.getBounds().height() * 5 / 4);
-        fPath.setFillType(SkPath::kEvenOdd_FillType);
+        fPath.setFillType(SkPathFillType::kEvenOdd);
         drawSet(canvas, &paint);
     }
 
